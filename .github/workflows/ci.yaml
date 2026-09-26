@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  parser:
+    name: Test parsers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: tree-sitter/setup-action/cli@v2
+      - name: Set up check tools
+        if: runner.os == 'macOS'
+        shell: sh
+        run: |
+          brew install llvm ts_query_ls
+          {
+            printf 'CC=%s/bin/clang\n' "$(brew --prefix llvm)"
+            printf 'CFLAGS=-std=c17 -isysroot %s\n' "$(xcrun --sdk macosx --show-sdk-path)"
+          } >>"$GITHUB_ENV"
+      - run: npm ci
+      - uses: tree-sitter/parser-test-action@v3
+        with:
+          generate: false
+          test-parser-cmd: ${{ runner.os == 'macOS' && 'npm run check' || 'npm test' }}
+          test-rust: true
+          rust-version: stable
+      - name: Check Rust bindings
+        shell: bash
+        run: |
+          rustup component add clippy rustfmt --toolchain stable
+          cargo +stable clippy --locked --all-targets -- -D warnings
+          cargo +stable fmt --all -- --check
+      - name: Build parsers
+        if: runner.os == 'macOS'
+        shell: sh
+        run: |
+          tree-sitter build --output gitconfig.so .
+      - name: Validate queries
+        if: runner.os == 'macOS'
+        shell: sh
+        run: >-
+          ts_query_ls check --format queries/
+          --config
+          '{"parser_install_directories":["."]}'

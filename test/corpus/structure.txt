@@ -1,0 +1,262 @@
+==================
+Missing section names preserve subsections without separator issues
+==================
+["x"]
+[ "y"]
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      issue: (syntax_issue (invalid_syntax (missing_section_name)))
+      subsection: (subsection
+        opening: (quote_open)
+        (subsection_text)
+        closing: (quote_close))
+      closing: (section_close))
+    (line_ending))
+  (section
+    header: (section_header
+      opening: (section_open)
+      issue: (syntax_issue (invalid_syntax (unexpected_header_content)))
+      issue: (syntax_issue (invalid_syntax (missing_section_name)))
+      subsection: (subsection
+        opening: (quote_open)
+        (subsection_text)
+        closing: (quote_close))
+      closing: (section_close))))
+
+==================
+Sections preserve same-line variables and independent owners
+==================
+[x] a=1
+[y]
+b=2
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text)) (line_ending))) (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text)))))
+
+==================
+Bare, empty and quoted-empty values remain distinct
+==================
+[x]
+a
+b=
+c=""
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) (line_ending)) (variable name: (variable_name (name_text)) operator: (assignment_operator) (line_ending)) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (quoted_value opening: (quote_open) closing: (quote_close))))))
+
+==================
+Subsection escapes retain their own grammar
+==================
+[remote "a\q"]
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) subsection: (subsection opening: (quote_open) (subsection_text) (escape) closing: (quote_close)) closing: (section_close))))
+
+==================
+Quoted and unquoted value fragments keep source order
+==================
+[x] a=b" c "d\t
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) (quoted_value opening: (quote_open) (value_text) closing: (quote_close)) (value_text) (escape)))))
+
+==================
+Continuation keeps an apparent header inside the value
+==================
+[x]
+a=b\
+[y]
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) (line_continuation) (value_text)))))
+
+==================
+Comment and blank lines retain their owners
+==================
+# before
+
+[x] ; after
+a=1 # tail
+
+---
+
+(document (comment (comment_marker) (comment_text) (line_ending)) (blank_line (line_ending)) (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (comment (comment_marker) (comment_text)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text)) (comment (comment_marker) (comment_text)) (line_ending))))
+
+==================
+Orphan variable exposes a missing section without a synthetic owner
+==================
+a=1
+---
+
+(document (variable issue: (syntax_issue (invalid_syntax (missing_section_header))) name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text))))
+
+==================
+Incomplete header exposes separate name and close issues
+==================
+[
+---
+
+(document (section header: (section_header opening: (section_open) issue: (syntax_issue (incomplete_syntax (missing_section_name))) issue: (syntax_issue (incomplete_syntax (missing_section_close))))))
+
+==================
+Newline completes an invalid header and preserves the next variable
+==================
+[x
+a=1
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) issue: (syntax_issue (invalid_syntax (missing_section_close)))) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text)))))
+
+==================
+Subsection requires a separator
+==================
+[x"a"]
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) issue: (syntax_issue (invalid_syntax (missing_subsection_separator))) subsection: (subsection opening: (quote_open) (subsection_text) closing: (quote_close)) closing: (section_close))))
+
+==================
+Unexpected header text includes its invalid whitespace
+==================
+[x y z]
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) issue: (syntax_issue (invalid_syntax (unexpected_header_content))) closing: (section_close))))
+
+==================
+Missing assignment preserves value
+==================
+[x] a b
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (variable name: (variable_name (name_text)) issue: (syntax_issue (invalid_syntax (missing_assignment_operator))) value: (value (value_text)))))
+
+==================
+Incomplete quoted escape and quote are distinct issues
+==================
+[x] a="b\
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (quoted_value opening: (quote_open) (value_text) issue: (syntax_issue (incomplete_syntax (incomplete_escape))) issue: (syntax_issue (incomplete_syntax (missing_quote_close))))))))
+
+==================
+Invalid escape preserves adjacent value text
+==================
+[x] a=b\qc
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) issue: (syntax_issue (invalid_syntax (invalid_escape))) (value_text)))))
+==================
+Legacy subsections own the separator and preserve empty text
+==================
+[remote.Origin.more]
+[remote.]
+[remote.part "quoted"]
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name
+        (name_text))
+      subsection: (subsection
+        (subsection_separator)
+        (subsection_text))
+      closing: (section_close))
+    (line_ending))
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name
+        (name_text))
+      subsection: (subsection
+        (subsection_separator))
+      closing: (section_close))
+    (line_ending))
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name
+        (name_text))
+      subsection: (subsection
+        opening: (quote_open)
+        (subsection_text)
+        closing: (quote_close))
+      closing: (section_close))))
+
+==================
+Same-line header text is a variable under the documented syntax
+==================
+[core][other]
+x=y
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      closing: (section_close))
+    (variable
+      name: (variable_name
+        issue: (syntax_issue (invalid_syntax (invalid_name_character)))
+        (name_text)
+        issue: (syntax_issue (invalid_syntax (invalid_name_character))))
+      (line_ending))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value (value_text)))))
+
+==================
+Invalid header whitespace preserves names, delimiters and later variables
+==================
+[ core ] x=y
+[remote "x" ]
+[remote.origin 	]
+z=w
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      issue: (syntax_issue (invalid_syntax (unexpected_header_content)))
+      name: (section_name (name_text))
+      issue: (syntax_issue (invalid_syntax (unexpected_header_content)))
+      closing: (section_close))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value (value_text))
+      (line_ending)))
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      subsection: (subsection
+        opening: (quote_open)
+        (subsection_text)
+        closing: (quote_close))
+      issue: (syntax_issue (invalid_syntax (unexpected_header_content)))
+      closing: (section_close))
+    (line_ending))
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      subsection: (subsection
+        (subsection_separator)
+        (subsection_text))
+      issue: (syntax_issue (invalid_syntax (unexpected_header_content)))
+      closing: (section_close))
+    (line_ending)
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value (value_text)))))

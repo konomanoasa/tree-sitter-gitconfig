@@ -1,0 +1,16 @@
+CompileFlags:
+  Add:
+    - -std=c17
+    - -xc
+    - -Wall
+    - -Wextra
+    - -Werror
+    - -pedantic
+    - -Wno-unused-function
+
+---
+If:
+  PathMatch: .*\.h
+CompileFlags:
+  Add:
+    - -xc-header

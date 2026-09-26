@@ -1,0 +1,648 @@
+[
+  {
+    "type": "blank_line",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "line_ending",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "comment",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "comment_marker",
+          "named": true
+        },
+        {
+          "type": "comment_text",
+          "named": true
+        },
+        {
+          "type": "line_ending",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "document",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "blank_line",
+          "named": true
+        },
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "section",
+          "named": true
+        },
+        {
+          "type": "variable",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "incomplete_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "invalid_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_encoding",
+          "named": true
+        },
+        {
+          "type": "invalid_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "invalid_subsection_character",
+          "named": true
+        },
+        {
+          "type": "missing_assignment_operator",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_header",
+          "named": true
+        },
+        {
+          "type": "missing_section_name",
+          "named": true
+        },
+        {
+          "type": "missing_subsection_separator",
+          "named": true
+        },
+        {
+          "type": "missing_variable_name",
+          "named": true
+        },
+        {
+          "type": "unexpected_header_content",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "quoted_value",
+    "named": true,
+    "fields": {
+      "closing": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
+      "opening": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "quote_open",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "escape",
+          "named": true
+        },
+        {
+          "type": "line_continuation",
+          "named": true
+        },
+        {
+          "type": "value_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "section",
+    "named": true,
+    "fields": {
+      "header": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "section_header",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "blank_line",
+          "named": true
+        },
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "line_ending",
+          "named": true
+        },
+        {
+          "type": "variable",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "section_header",
+    "named": true,
+    "fields": {
+      "closing": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "section_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "section_name",
+            "named": true
+          }
+        ]
+      },
+      "opening": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "section_open",
+            "named": true
+          }
+        ]
+      },
+      "subsection": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "subsection",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "section_name",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "name_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "subsection",
+    "named": true,
+    "fields": {
+      "closing": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
+      "opening": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "quote_open",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "escape",
+          "named": true
+        },
+        {
+          "type": "subsection_separator",
+          "named": true
+        },
+        {
+          "type": "subsection_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "syntax_issue",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_syntax",
+          "named": true
+        },
+        {
+          "type": "invalid_syntax",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "value",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "escape",
+          "named": true
+        },
+        {
+          "type": "line_continuation",
+          "named": true
+        },
+        {
+          "type": "quoted_value",
+          "named": true
+        },
+        {
+          "type": "value_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "variable",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "variable_name",
+            "named": true
+          }
+        ]
+      },
+      "operator": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "assignment_operator",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "value",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "line_ending",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "variable_name",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "name_text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "assignment_operator",
+    "named": true
+  },
+  {
+    "type": "comment_marker",
+    "named": true
+  },
+  {
+    "type": "comment_text",
+    "named": true
+  },
+  {
+    "type": "escape",
+    "named": true
+  },
+  {
+    "type": "incomplete_escape",
+    "named": true
+  },
+  {
+    "type": "invalid_encoding",
+    "named": true
+  },
+  {
+    "type": "invalid_escape",
+    "named": true
+  },
+  {
+    "type": "invalid_name_character",
+    "named": true
+  },
+  {
+    "type": "invalid_subsection_character",
+    "named": true
+  },
+  {
+    "type": "line_continuation",
+    "named": true
+  },
+  {
+    "type": "line_ending",
+    "named": true
+  },
+  {
+    "type": "missing_assignment_operator",
+    "named": true
+  },
+  {
+    "type": "missing_quote_close",
+    "named": true
+  },
+  {
+    "type": "missing_section_close",
+    "named": true
+  },
+  {
+    "type": "missing_section_header",
+    "named": true
+  },
+  {
+    "type": "missing_section_name",
+    "named": true
+  },
+  {
+    "type": "missing_subsection_separator",
+    "named": true
+  },
+  {
+    "type": "missing_variable_name",
+    "named": true
+  },
+  {
+    "type": "name_text",
+    "named": true
+  },
+  {
+    "type": "quote_close",
+    "named": true
+  },
+  {
+    "type": "quote_open",
+    "named": true
+  },
+  {
+    "type": "section_close",
+    "named": true
+  },
+  {
+    "type": "section_open",
+    "named": true
+  },
+  {
+    "type": "subsection_separator",
+    "named": true
+  },
+  {
+    "type": "subsection_text",
+    "named": true
+  },
+  {
+    "type": "unexpected_header_content",
+    "named": true
+  },
+  {
+    "type": "value_text",
+    "named": true
+  }
+]

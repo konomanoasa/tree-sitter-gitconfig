@@ -1,0 +1,30 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "gitconfig",
+      "title": "Gitconfig",
+      "scope": "source.gitconfig",
+      "path": ".",
+      "file-types": [".gitconfig", "gitconfig"],
+      "injection-regex": "^gitconfig$",
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for gitconfig.",
+    "links": {
+      "repository": "https://github.com/konomanoasa/tree-sitter-gitconfig"
+    }
+  },
+  "bindings": {
+    "c": false,
+    "go": false,
+    "node": false,
+    "python": false,
+    "rust": true,
+    "swift": false
+  }
+}
