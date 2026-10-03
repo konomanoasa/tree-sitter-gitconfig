@@ -8,17 +8,18 @@ CompileFlags:
     - -pedantic
 
 ---
+# Standalone headers are checked without their callers.
 If:
   PathMatch: .*\.h
 CompileFlags:
   Add:
     - -xc-header
+    - -Wno-unused-function
 
 ---
-# The included scanner's helpers look unused to clangd, which drops those
-# diagnostics but still counts them toward its error limit.
+# Directly included scanner helpers may be unused in individual tests.
 If:
-  PathMatch: (.*/)?test/[^/]*\.c
+  PathMatch: test/[^/]*\.c
 CompileFlags:
   Add:
     - -Wno-unused-function

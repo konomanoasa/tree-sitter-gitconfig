@@ -15,7 +15,7 @@ npm install @konomanoasa/tree-sitter-gitconfig
 
 ## Development
 
-Development uses Node.js 24 or later.
+Development uses Node.js 24.21.0 or later.
 
 ```sh
 npm install
