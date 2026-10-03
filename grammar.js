@@ -84,7 +84,7 @@ export default grammar({
     ...issueKinds.map(([name]) => $[`_${name}`]),
     $._error_sentinel,
   ],
-  extras: ($) => [$._line_start, $._layout],
+  extras: ($) => [$._line_start, $._layout, $._unmatchable],
   rules: {
     document: ($) =>
       repeat(choice($.section, $.blank_line, $.comment, $.variable)),
@@ -201,6 +201,8 @@ export default grammar({
         $._comment_end,
       ),
     blank_line: ($) => seq($._blank_start, choice($.line_ending, $._eof)),
+    // Prevent Tree-sitter 0.27.0 from accepting EOF before the input ends.
+    _unmatchable: () => token(seq(/[\s\S]/, /[^\s\S]/)),
     ...issueRules,
   },
 });

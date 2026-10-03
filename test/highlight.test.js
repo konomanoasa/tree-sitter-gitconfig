@@ -284,8 +284,8 @@ const finalCaptureCases = [
     ],
   },
   {
-    name: "continued value captures only the continuation",
-    source: "[x] a=b\\\nc",
+    name: "continued value preserves internal whitespace captures",
+    source: "[x] a=b\\\n  c",
     captures: [
       [0, 1, "punctuation.bracket"],
       [1, 2, "type"],
@@ -294,7 +294,21 @@ const finalCaptureCases = [
       [5, 6, "operator"],
       [6, 7, "string"],
       [7, 9, "string.escape"],
-      [9, 10, "string"],
+      [9, 12, "string"],
+    ],
+  },
+  {
+    name: "continued value leaves leading whitespace uncaptured",
+    source: '[x] a=\\\n  "" c',
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 2, "type"],
+      [2, 3, "punctuation.bracket"],
+      [4, 5, "property"],
+      [5, 6, "operator"],
+      [6, 8, "string.escape"],
+      [10, 12, "string"],
+      [13, 14, "string"],
     ],
   },
   {

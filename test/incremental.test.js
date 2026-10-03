@@ -135,6 +135,56 @@ for (const [name, source, edits] of histories) {
     assert.deepEqual(parse(source, edits), parse(applyEdits(source, edits))));
 }
 
+for (const [name, source, edits, expected] of [
+  [
+    "insert content before continuation",
+    "[x] a=\\\n  c",
+    [{ byte: 6, deleteBytes: 0, insert: "b" }],
+    [
+      [6, 7],
+      [9, 12],
+    ],
+  ],
+  [
+    "remove content before continuation",
+    "[x] a=b\\\n  c",
+    [{ byte: 6, deleteBytes: 1, insert: "" }],
+    [[10, 11]],
+  ],
+  [
+    "fill empty quotes before continuation",
+    '[x] a=""\\\n  c',
+    [{ byte: 7, deleteBytes: 0, insert: " " }],
+    [
+      [7, 8],
+      [11, 14],
+    ],
+  ],
+  [
+    "empty quotes before continuation",
+    '[x] a="b"\\\n  c',
+    [{ byte: 7, deleteBytes: 1, insert: "" }],
+    [[12, 13]],
+  ],
+  [
+    "remove escaped content before continuation",
+    "[x] a=\\t\\\n  c",
+    [{ byte: 6, deleteBytes: 2, insert: "" }],
+    [[10, 11]],
+  ],
+]) {
+  test(`gitconfig: ${name} reclassifies value whitespace`, () => {
+    const nodes = parse(source, edits);
+    assert.deepEqual(nodes, parse(applyEdits(source, edits)));
+    assert.deepEqual(
+      nodes
+        .filter(({ kind }) => kind === "value_text")
+        .map(({ start, end }) => [start, end]),
+      expected,
+    );
+  });
+}
+
 test("gitconfig: fixed-seed generated histories preserve source structure and issue ranges", () => {
   let state = 0x67ac421;
   const next = (maximum) => {

@@ -933,6 +933,22 @@
         }
       ]
     },
+    "_unmatchable": {
+      "type": "TOKEN",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "PATTERN",
+            "value": "[\\s\\S]"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[^\\s\\S]"
+          }
+        ]
+      }
+    },
     "_invalid_encoding_outcome": {
       "type": "ALIAS",
       "content": {
@@ -1248,6 +1264,10 @@
     {
       "type": "SYMBOL",
       "name": "_layout"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_unmatchable"
     }
   ],
   "conflicts": [],

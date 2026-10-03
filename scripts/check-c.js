@@ -181,9 +181,11 @@ function checkDiagnostics(clang, clangd, directory) {
         "-I",
         variant.includeDirectory,
         ...warningArguments,
-        // Clangd checks headers and included helpers without all their callers.
-        "-Wno-unused-function",
-        ...(source === variant.source ? [] : variant.contractArguments),
+        // The included scanner's helpers look unused to clangd, which drops
+        // those diagnostics but still counts them toward its error limit.
+        ...(source === variant.source
+          ? []
+          : ["-Wno-unused-function", ...variant.contractArguments]),
         "-fsyntax-only",
         source,
       ],

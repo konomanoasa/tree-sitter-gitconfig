@@ -6,7 +6,6 @@ CompileFlags:
     - -Wextra
     - -Werror
     - -pedantic
-    - -Wno-unused-function
 
 ---
 If:
@@ -14,3 +13,12 @@ If:
 CompileFlags:
   Add:
     - -xc-header
+
+---
+# The included scanner's helpers look unused to clangd, which drops those
+# diagnostics but still counts them toward its error limit.
+If:
+  PathMatch: (.*/)?test/[^/]*\.c
+CompileFlags:
+  Add:
+    - -Wno-unused-function

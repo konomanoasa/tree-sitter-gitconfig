@@ -75,6 +75,50 @@ a=b\
 (document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) (line_continuation) (value_text)))))
 
 ==================
+Continuations and empty quotes preserve leading layout and internal text
+==================
+[x]
+a=\
+  "" \
+  c
+b=d\
+  e
+c="\
+  f"
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      closing: (section_close))
+    (line_ending)
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value
+        (line_continuation)
+        (quoted_value opening: (quote_open) closing: (quote_close))
+        (line_continuation)
+        (value_text))
+      (line_ending))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value (value_text) (line_continuation) (value_text))
+      (line_ending))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value
+        (quoted_value
+          opening: (quote_open)
+          (line_continuation)
+          (value_text)
+          closing: (quote_close))))))
+
+==================
 Comment and blank lines retain their owners
 ==================
 # before

@@ -544,6 +544,90 @@ test("gitconfig: trailing value spaces belong to the variable but not value text
   );
 });
 
+for (const [name, source, expected, expectedIssues = []] of [
+  ["leading spaces after continuation", "[x] a=\\\n  c\n", [[10, 11, "c"]]],
+  [
+    "leading tab after CRLF continuation",
+    "[x] a=\\\r\n\tc\r\n",
+    [[10, 11, "c"]],
+  ],
+  [
+    "leading spaces across continuations",
+    "[x] a=\\\n \\\n  c",
+    [[13, 14, "c"]],
+  ],
+  ["empty quotes after continuation", '[x] a=\\\n  "" c', [[13, 14, "c"]]],
+  ["empty quotes before continuation", '[x] a=""\\\n  c', [[12, 13, "c"]]],
+  ["empty quotes before leading spaces", '[x] a=""  c', [[10, 11, "c"]]],
+  [
+    "internal spaces after continuation",
+    "[x] a=b\\\n  c",
+    [
+      [6, 7, "b"],
+      [9, 12, "  c"],
+    ],
+  ],
+  [
+    "escaped content before continuation",
+    "[x] a=\\t\\\n  c",
+    [[10, 13, "  c"]],
+  ],
+  ["quoted spaces after continuation", '[x] a="\\\n  c"', [[9, 12, "  c"]]],
+  [
+    "quoted content before continuation",
+    '[x] a=" "\\\n  c',
+    [
+      [7, 8, " "],
+      [11, 14, "  c"],
+    ],
+  ],
+  ["continued whitespace before comment", "[x] a=\\\n  #comment", []],
+  [
+    "leading spaces in the next variable",
+    "[x] a=b\nnext=\\\n  c",
+    [
+      [6, 7, "b"],
+      [17, 18, "c"],
+    ],
+  ],
+  [
+    "internal and trailing spaces after continuation",
+    "[x] a=b\\\n \tc \t#tail",
+    [
+      [6, 7, "b"],
+      [9, 12, " \tc"],
+    ],
+  ],
+  [
+    "invalid escape before continuation",
+    "[x] a=\\q\\\n  c",
+    [[10, 13, "  c"]],
+    [["invalid_syntax", "invalid_escape", 6, 8]],
+  ],
+  [
+    "invalid encoding before continuation",
+    Buffer.from([91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99]),
+    [[9, 12, "  c"]],
+    [["invalid_syntax", "invalid_encoding", 6, 7]],
+  ],
+]) {
+  test(`gitconfig: ${name} preserve value text ranges`, () => {
+    const nodes = parse(source);
+    const bytes = Buffer.from(source);
+    assert.deepEqual(issues(nodes), expectedIssues);
+    assert.deepEqual(
+      nodes
+        .filter(({ kind }) => kind === "value_text")
+        .map(({ start, end }) => [
+          start,
+          end,
+          bytes.subarray(start, end).toString(),
+        ]),
+      expected,
+    );
+  });
+}
+
 test("gitconfig: quoted and unquoted fragments preserve source ranges", () => {
   const source = '[x] a=b" c "d\\t';
   const nodes = parse(source);
@@ -595,7 +679,7 @@ test("gitconfig: Git runtime checks the documented supplementary cases", (t) => 
     const version = run(["--version"]);
     assert.equal(version.status, 0, version.stderr);
     t.diagnostic(
-      `Supplementary behavior established with Git 2.55.0; checked with ${version.stdout.trim()}`,
+      `Supplementary behavior established with Git 2.55.0 (value whitespace: 2.56.0); checked with ${version.stdout.trim()}`,
     );
     assert.equal(run(["init", "--quiet"]).status, 0);
     const path = join(directory, "config-input");
@@ -619,6 +703,18 @@ test("gitconfig: Git runtime checks the documented supplementary cases", (t) => 
       ["[remote.Origin.More]\nx=y\n", "remote.origin.more.x\ny\0"],
       ['[remote "origin.more"]\nx=y\n', "remote.origin.more.x\ny\0"],
       ['[remote.name "Origin"]\nx=y\n', "remote.name.Origin.x\ny\0"],
+      ["[core]\nx=\\\n  c\n", "core.x\nc\0"],
+      ["[core]\nx=\\\r\n\tc\r\n", "core.x\nc\0"],
+      ["[core]\nx=\\\n \\\n  c\n", "core.x\nc\0"],
+      ['[core]\nx=\\\n  "" c\n', "core.x\nc\0"],
+      ['[core]\nx=""\\\n  c\n', "core.x\nc\0"],
+      ['[core]\nx=""  c\n', "core.x\nc\0"],
+      ["[core]\nx=b\\\n  c\n", "core.x\nb  c\0"],
+      ["[core]\nx=\\t\\\n  c\n", "core.x\n\t  c\0"],
+      ['[core]\nx="\\\n  c"\n', "core.x\n  c\0"],
+      ['[core]\nx=" "\\\n  c\n', "core.x\n   c\0"],
+      ["[core]\nx=\\\n  #comment\n", "core.x\n\0"],
+      ["[core]\nx=b\\\n \tc \t#tail\n", "core.x\nb \tc\0"],
     ];
     for (const [source, expected] of valueCases) {
       const result = config(source);
