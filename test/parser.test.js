@@ -310,6 +310,12 @@ const invalidCases = [
     ["variable"],
   ],
   [
+    "indented variable outside section places its missing header after layout",
+    " \t a=1",
+    [["invalid_syntax", "missing_section_header", 3, 3]],
+    ["variable"],
+  ],
+  [
     "incomplete section name and close",
     "[",
     [
@@ -551,6 +557,26 @@ test("gitconfig: section, variable and comment ranges have explicit owners", () 
   );
 });
 
+for (const { source, expected } of [
+  { source: "[x] \t", expected: [[0, 5]] },
+  {
+    source: "[x]\n[y] ",
+    expected: [
+      [0, 4],
+      [4, 8],
+    ],
+  },
+]) {
+  test(`gitconfig: a section owns trailing header whitespace before EOF in ${JSON.stringify(source)}`, () => {
+    assert.deepEqual(
+      parse(source)
+        .filter(({ kind }) => kind === "section")
+        .map(({ start, end }) => [start, end]),
+      expected,
+    );
+  });
+}
+
 test("gitconfig: header whitespace preserves names, delimiters and following variables", () => {
   const source = "[ core ] x=y\n[next]\nz=w";
   const nodes = parse(source);
@@ -596,6 +622,19 @@ test("gitconfig: trailing value spaces belong to the variable but not value text
     ],
   );
 });
+
+for (const { source, expected } of [
+  { source: '[x] a= "" #tail', expected: [7, 9] },
+  { source: '[x] a= ""  ', expected: [7, 9] },
+  { source: "[x] a=\\\n  #tail", expected: [6, 8] },
+]) {
+  test(`gitconfig: trailing whitespace after a value without content belongs to the variable in ${JSON.stringify(source)}`, () => {
+    const nodes = parse(source);
+    const value = nodes.find(({ kind }) => kind === "value");
+    assert.deepEqual([value?.start, value?.end], expected);
+    assert.equal(value && nodes[value.parent].kind, "variable");
+  });
+}
 
 for (const { name, source, expected, expectedIssues = [] } of [
   {
@@ -849,4 +888,195 @@ test("gitconfig: a long invalid name run forms one issue with its full range", (
     ["invalid_syntax", "invalid_name_character", 4, 10004],
   ]);
   assert.deepEqual(owners(tree), ["variable_name"]);
+});
+
+const trailingCrCases = [
+  {
+    name: "section name",
+    source: "[a\r",
+    expected: [
+      ["incomplete_syntax", "invalid_name_character", 2, 3],
+      ["incomplete_syntax", "missing_section_close", 3, 3],
+    ],
+    completed: [["invalid_syntax", "missing_section_close", 2, 2]],
+  },
+  {
+    name: "legacy subsection name",
+    source: "[a.b\r",
+    expected: [
+      ["incomplete_syntax", "invalid_name_character", 4, 5],
+      ["incomplete_syntax", "missing_section_close", 5, 5],
+    ],
+    completed: [["invalid_syntax", "missing_section_close", 4, 4]],
+  },
+  {
+    name: "variable name",
+    source: "[a]\nx\r",
+    expected: [["incomplete_syntax", "invalid_name_character", 5, 6]],
+    completed: [],
+  },
+  {
+    name: "value without an assignment operator after a space",
+    source: "[a]\nx \r",
+    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
+    completed: [],
+  },
+  {
+    name: "value without an assignment operator after a tab",
+    source: "[a]\nx\t\r",
+    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
+    completed: [],
+  },
+  {
+    name: "value without an assignment operator before any section",
+    source: "x \r",
+    expected: [
+      ["invalid_syntax", "missing_section_header", 0, 0],
+      ["incomplete_syntax", "missing_assignment_operator", 2, 2],
+    ],
+    completed: [["invalid_syntax", "missing_section_header", 0, 0]],
+  },
+  {
+    name: "value without an assignment operator on the header line",
+    source: "[a] x \r",
+    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
+    completed: [],
+  },
+  {
+    name: "unquoted value continuation",
+    source: "[a]\nx=x\\\r",
+    expected: [["incomplete_syntax", "incomplete_escape", 7, 9]],
+    completed: [],
+  },
+  {
+    name: "quoted value continuation",
+    source: '[a]\nx="x\\\r',
+    expected: [
+      ["incomplete_syntax", "incomplete_escape", 8, 10],
+      ["incomplete_syntax", "missing_quote_close", 10, 10],
+    ],
+    completed: [["incomplete_syntax", "missing_quote_close", 11, 11]],
+  },
+  {
+    name: "header tail",
+    source: '[a "b"\r',
+    expected: [
+      ["incomplete_syntax", "unexpected_header_content", 6, 7],
+      ["incomplete_syntax", "missing_section_close", 7, 7],
+    ],
+    completed: [["invalid_syntax", "missing_section_close", 6, 6]],
+  },
+  {
+    name: "name violation before the final CR",
+    source: "[a@\r",
+    expected: [
+      ["invalid_syntax", "invalid_name_character", 2, 3],
+      ["incomplete_syntax", "invalid_name_character", 3, 4],
+      ["incomplete_syntax", "missing_section_close", 4, 4],
+    ],
+    completed: [
+      ["invalid_syntax", "invalid_name_character", 2, 3],
+      ["invalid_syntax", "missing_section_close", 3, 3],
+    ],
+  },
+  {
+    name: "header whitespace before the final CR",
+    source: "[a \r",
+    expected: [
+      ["invalid_syntax", "unexpected_header_content", 2, 3],
+      ["incomplete_syntax", "unexpected_header_content", 3, 4],
+      ["incomplete_syntax", "missing_section_close", 4, 4],
+    ],
+    completed: [
+      ["invalid_syntax", "unexpected_header_content", 2, 3],
+      ["invalid_syntax", "missing_section_close", 3, 3],
+    ],
+  },
+  {
+    name: "CR-only line before any section",
+    source: "\r",
+    expected: [
+      ["incomplete_syntax", "missing_section_header", 0, 0],
+      ["incomplete_syntax", "invalid_name_character", 0, 1],
+    ],
+    completed: [],
+  },
+];
+for (const { name, source, expected, completed } of trailingCrCases) {
+  test(`gitconfig: EOF CR can become CRLF in ${name}`, () => {
+    const original = parse(source);
+    assert.deepEqual(issues(original), expected);
+    const edits = [
+      { byte: Buffer.byteLength(source), deleteBytes: 0, insert: "\n" },
+    ];
+    const incremental = parse(source, edits);
+    assert.deepEqual(issues(incremental), completed);
+    assert.deepEqual(incremental, parse(`${source}\n`));
+    edits.push({ byte: Buffer.byteLength(source), deleteBytes: 1, insert: "" });
+    assert.deepEqual(parse(source, edits), original);
+  });
+}
+
+test("gitconfig: completing a CR-only value removes the missing assignment and value", () => {
+  const source = "[a]\nx \r";
+  const original = parse(source);
+  assert.deepEqual(owners(original), ["variable"]);
+  assert.deepEqual(leaves(source, original), [
+    ["section_open", "["],
+    ["name_text", "a"],
+    ["section_close", "]"],
+    ["line_ending", "\n"],
+    ["name_text", "x"],
+    ["missing_assignment_operator", ""],
+    ["value_text", "\r"],
+  ]);
+  const completed = parse(`${source}\n`);
+  assert.ok(!completed.some(({ kind }) => kind === "value"));
+  assert.deepEqual(leaves(`${source}\n`, completed), [
+    ["section_open", "["],
+    ["name_text", "a"],
+    ["section_close", "]"],
+    ["line_ending", "\n"],
+    ["name_text", "x"],
+    ["line_ending", "\r\n"],
+  ]);
+});
+
+test("gitconfig: a missing assignment stays invalid when LF cannot remove the whole value", () => {
+  for (const source of [
+    "[a]\nx y\r",
+    "[a]\nx \r\r",
+    "[a]\nx \rz",
+    "[a]\nx \r ",
+    "[a]\nx \r#",
+  ]) {
+    const expected = [["invalid_syntax", "missing_assignment_operator", 6, 6]];
+    assert.deepEqual(issues(parse(source)), expected, JSON.stringify(source));
+    const edits = [
+      { byte: Buffer.byteLength(source), deleteBytes: 0, insert: "\n" },
+    ];
+    const incremental = parse(source, edits);
+    assert.deepEqual(issues(incremental), expected, JSON.stringify(source));
+    assert.deepEqual(incremental, parse(`${source}\n`));
+  }
+});
+
+test("gitconfig: only the final CR can complete a line ending", () => {
+  assert.deepEqual(issues(parse("[a]\nx\r\r")), [
+    ["invalid_syntax", "invalid_name_character", 5, 6],
+    ["incomplete_syntax", "invalid_name_character", 6, 7],
+  ]);
+  assert.deepEqual(issues(parse("[a]\nx\rx")), [
+    ["invalid_syntax", "invalid_name_character", 5, 6],
+  ]);
+  assert.deepEqual(issues(parse("[a]\nx=x\\\rx")), [
+    ["invalid_syntax", "invalid_escape", 7, 9],
+  ]);
+  for (const source of ["[a]\nx=x\r", "# text\r"]) {
+    assert.deepEqual(issues(parse(source)), []);
+  }
+  assert.deepEqual(issues(parse('[a "x\\\r')), [
+    ["incomplete_syntax", "missing_quote_close", 7, 7],
+    ["incomplete_syntax", "missing_section_close", 7, 7],
+  ]);
 });

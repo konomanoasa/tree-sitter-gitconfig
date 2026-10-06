@@ -59,6 +59,8 @@ jobs:
           test-parser-cmd: npm test
           test-rust: true
           rust-version: stable
+      - name: Test Rust builds
+        run: npm exec --call "node --test test/rust/build.test.js"
       - name: Validate queries
         if: runner.os == 'macOS'
         shell: sh

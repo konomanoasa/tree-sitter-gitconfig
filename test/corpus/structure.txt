@@ -320,3 +320,47 @@ Contiguous forbidden section name characters preserve normal fragments
         issue: (syntax_issue (invalid_syntax (invalid_name_character)))
         (name_text))
       closing: (section_close))))
+
+==================
+EOF CR in a section name can complete CRLF
+==================
+[a
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text) issue: (syntax_issue (incomplete_syntax (invalid_name_character)))) issue: (syntax_issue (incomplete_syntax (missing_section_close))))))
+
+==================
+EOF CR after a value backslash can complete a continuation
+==================
+[a]
+x=x\
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) issue: (syntax_issue (incomplete_syntax (incomplete_escape)))))))
+
+==================
+EOF CR after a quoted subsection can complete CRLF
+==================
+[a "b"
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) subsection: (subsection opening: (quote_open) (subsection_text) closing: (quote_close)) issue: (syntax_issue (incomplete_syntax (unexpected_header_content))) issue: (syntax_issue (incomplete_syntax (missing_section_close))))))
+
+==================
+EOF CR as a value can complete a variable without an assignment
+==================
+[a]
+x 
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      closing: (section_close))
+    (line_ending)
+    (variable
+      name: (variable_name (name_text))
+      issue: (syntax_issue (incomplete_syntax (missing_assignment_operator)))
+      value: (value (value_text)))))

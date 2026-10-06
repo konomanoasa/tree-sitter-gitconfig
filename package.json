@@ -26,7 +26,6 @@
     "format": "biome format --write .",
     "generate": "npm run tree-sitter -- generate-all",
     "test": "npm run tree-sitter -- test-corpus --rebuild && node --test --test-concurrency=1 \"test/*.test.js\"",
-    "test:bindings": "cargo test --locked",
     "test:fuzz": "node --test --test-name-pattern=\"fixed-seed generated histories\" test/incremental.test.js",
     "test:fuzz:corpus": "npm run tree-sitter -- fuzz-all --iterations 100 --edits 5",
     "test:highlights": "node --test test/highlight.test.js",

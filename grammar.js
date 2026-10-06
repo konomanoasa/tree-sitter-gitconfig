@@ -1,6 +1,7 @@
 const issueKinds = [
   ["invalid_encoding", "invalid_syntax", "invalid_encoding"],
   ["invalid_name_character", "invalid_syntax", "invalid_name_character"],
+  ["incomplete_name_character", "incomplete_syntax", "invalid_name_character"],
   [
     "invalid_subsection_character",
     "invalid_syntax",
@@ -21,11 +22,22 @@ const issueKinds = [
   ],
   ["unexpected_header_content", "invalid_syntax", "unexpected_header_content"],
   [
+    "incomplete_header_content",
+    "incomplete_syntax",
+    "unexpected_header_content",
+  ],
+  [
     "missing_assignment_operator",
     "invalid_syntax",
     "missing_assignment_operator",
   ],
+  [
+    "incomplete_assignment_operator",
+    "incomplete_syntax",
+    "missing_assignment_operator",
+  ],
   ["missing_section_header", "invalid_syntax", "missing_section_header"],
+  ["incomplete_section_header", "incomplete_syntax", "missing_section_header"],
 ];
 const issueRules = Object.fromEntries(
   issueKinds.flatMap(([token, outcome, reason]) => [
@@ -37,7 +49,13 @@ const issue = ($, name) =>
   field("issue", alias($[`_${name}_issue`], $.syntax_issue));
 const missing = ($, name) =>
   choice(issue($, `missing_${name}`), issue($, `incomplete_${name}`));
-// The owner holds a backslash before the issue of the unit it cannot escape.
+const nameContent = ($, text) =>
+  choice(
+    text,
+    issue($, "invalid_name_character"),
+    issue($, "incomplete_name_character"),
+    issue($, "invalid_encoding"),
+  );
 const valuePieces = ($) => [
   $.value_text,
   $.escape,
@@ -99,7 +117,9 @@ export default grammar({
         seq(
           $._section_start,
           field("header", $.section_header),
-          repeat(choice($.variable, $.blank_line, $.comment, $.line_ending)),
+          repeat(
+            choice($.variable, $.blank_line, $.comment, $.line_ending, $._eof),
+          ),
         ),
       ),
     section_header: ($) =>
@@ -117,6 +137,7 @@ export default grammar({
         repeat(
           choice(
             issue($, "unexpected_header_content"),
+            issue($, "incomplete_header_content"),
             issue($, "invalid_encoding"),
           ),
         ),
@@ -125,29 +146,13 @@ export default grammar({
     section_name: ($) => $._name,
     variable_name: ($) => $._name,
     _name: ($) =>
-      seq(
-        $._name_start,
-        repeat1(
-          choice(
-            $.name_text,
-            issue($, "invalid_name_character"),
-            issue($, "invalid_encoding"),
-          ),
-        ),
-        $._name_end,
-      ),
+      seq($._name_start, repeat1(nameContent($, $.name_text)), $._name_end),
     subsection: ($) =>
       choice(
         $._quoted_subsection,
         seq(
           $.subsection_separator,
-          repeat(
-            choice(
-              $.subsection_text,
-              issue($, "invalid_name_character"),
-              issue($, "invalid_encoding"),
-            ),
-          ),
+          repeat(nameContent($, $.subsection_text)),
           $._subsection_end,
         ),
       ),
@@ -169,11 +174,7 @@ export default grammar({
       ),
     variable: ($) => seq($._variable_start, $._variable_content),
     _orphan_variable: ($) =>
-      seq(
-        $._variable_start,
-        issue($, "missing_section_header"),
-        $._variable_content,
-      ),
+      seq($._variable_start, missing($, "section_header"), $._variable_content),
     _variable_content: ($) =>
       seq(
         choice(
@@ -184,7 +185,7 @@ export default grammar({
           seq(
             choice(
               field("operator", $.assignment_operator),
-              issue($, "missing_assignment_operator"),
+              missing($, "assignment_operator"),
             ),
             optional(field("value", $.value)),
           ),

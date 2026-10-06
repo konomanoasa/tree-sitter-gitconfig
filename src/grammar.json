@@ -69,6 +69,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "line_ending"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_eof"
                 }
               ]
             }
@@ -223,6 +227,19 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
+                    "name": "_incomplete_header_content_issue"
+                  },
+                  "named": true,
+                  "value": "syntax_issue"
+                }
+              },
+              {
+                "type": "FIELD",
+                "name": "issue",
+                "content": {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
                     "name": "_invalid_encoding_issue"
                   },
                   "named": true,
@@ -322,6 +339,19 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
+                    "name": "_incomplete_name_character_issue"
+                  },
+                  "named": true,
+                  "value": "syntax_issue"
+                }
+              },
+              {
+                "type": "FIELD",
+                "name": "issue",
+                "content": {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
                     "name": "_invalid_encoding_issue"
                   },
                   "named": true,
@@ -368,6 +398,19 @@
                       "content": {
                         "type": "SYMBOL",
                         "name": "_invalid_name_character_issue"
+                      },
+                      "named": true,
+                      "value": "syntax_issue"
+                    }
+                  },
+                  {
+                    "type": "FIELD",
+                    "name": "issue",
+                    "content": {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_incomplete_name_character_issue"
                       },
                       "named": true,
                       "value": "syntax_issue"
@@ -547,17 +590,35 @@
           "name": "_variable_start"
         },
         {
-          "type": "FIELD",
-          "name": "issue",
-          "content": {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_missing_section_header_issue"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "issue",
+              "content": {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_missing_section_header_issue"
+                },
+                "named": true,
+                "value": "syntax_issue"
+              }
             },
-            "named": true,
-            "value": "syntax_issue"
-          }
+            {
+              "type": "FIELD",
+              "name": "issue",
+              "content": {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_incomplete_section_header_issue"
+                },
+                "named": true,
+                "value": "syntax_issue"
+              }
+            }
+          ]
         },
         {
           "type": "SYMBOL",
@@ -612,17 +673,35 @@
                       }
                     },
                     {
-                      "type": "FIELD",
-                      "name": "issue",
-                      "content": {
-                        "type": "ALIAS",
-                        "content": {
-                          "type": "SYMBOL",
-                          "name": "_missing_assignment_operator_issue"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "FIELD",
+                          "name": "issue",
+                          "content": {
+                            "type": "ALIAS",
+                            "content": {
+                              "type": "SYMBOL",
+                              "name": "_missing_assignment_operator_issue"
+                            },
+                            "named": true,
+                            "value": "syntax_issue"
+                          }
                         },
-                        "named": true,
-                        "value": "syntax_issue"
-                      }
+                        {
+                          "type": "FIELD",
+                          "name": "issue",
+                          "content": {
+                            "type": "ALIAS",
+                            "content": {
+                              "type": "SYMBOL",
+                              "name": "_incomplete_assignment_operator_issue"
+                            },
+                            "named": true,
+                            "value": "syntax_issue"
+                          }
+                        }
+                      ]
                     }
                   ]
                 },
@@ -1004,6 +1083,24 @@
       "named": true,
       "value": "invalid_syntax"
     },
+    "_incomplete_name_character_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_name_character"
+      },
+      "named": true,
+      "value": "invalid_name_character"
+    },
+    "_incomplete_name_character_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_name_character_outcome"
+      },
+      "named": true,
+      "value": "incomplete_syntax"
+    },
     "_invalid_subsection_character_outcome": {
       "type": "ALIAS",
       "content": {
@@ -1238,6 +1335,24 @@
       "named": true,
       "value": "invalid_syntax"
     },
+    "_incomplete_header_content_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_header_content"
+      },
+      "named": true,
+      "value": "unexpected_header_content"
+    },
+    "_incomplete_header_content_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_header_content_outcome"
+      },
+      "named": true,
+      "value": "incomplete_syntax"
+    },
     "_missing_assignment_operator_outcome": {
       "type": "ALIAS",
       "content": {
@@ -1256,6 +1371,24 @@
       "named": true,
       "value": "invalid_syntax"
     },
+    "_incomplete_assignment_operator_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_assignment_operator"
+      },
+      "named": true,
+      "value": "missing_assignment_operator"
+    },
+    "_incomplete_assignment_operator_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_assignment_operator_outcome"
+      },
+      "named": true,
+      "value": "incomplete_syntax"
+    },
     "_missing_section_header_outcome": {
       "type": "ALIAS",
       "content": {
@@ -1273,6 +1406,24 @@
       },
       "named": true,
       "value": "invalid_syntax"
+    },
+    "_incomplete_section_header_outcome": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_section_header"
+      },
+      "named": true,
+      "value": "missing_section_header"
+    },
+    "_incomplete_section_header_issue": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_incomplete_section_header_outcome"
+      },
+      "named": true,
+      "value": "incomplete_syntax"
     }
   },
   "extras": [
@@ -1418,6 +1569,10 @@
     },
     {
       "type": "SYMBOL",
+      "name": "_incomplete_name_character"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_invalid_subsection_character"
     },
     {
@@ -1470,11 +1625,23 @@
     },
     {
       "type": "SYMBOL",
+      "name": "_incomplete_header_content"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_missing_assignment_operator"
     },
     {
       "type": "SYMBOL",
+      "name": "_incomplete_assignment_operator"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_missing_section_header"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_incomplete_section_header"
     },
     {
       "type": "SYMBOL",

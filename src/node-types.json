@@ -89,6 +89,14 @@
           "named": true
         },
         {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "missing_assignment_operator",
+          "named": true
+        },
+        {
           "type": "missing_quote_close",
           "named": true
         },
@@ -97,7 +105,15 @@
           "named": true
         },
         {
+          "type": "missing_section_header",
+          "named": true
+        },
+        {
           "type": "missing_section_name",
+          "named": true
+        },
+        {
+          "type": "unexpected_header_content",
           "named": true
         }
       ]

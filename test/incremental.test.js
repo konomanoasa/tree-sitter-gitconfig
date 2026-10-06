@@ -24,24 +24,25 @@ for (const [owner, prefix, suffix] of [
   ["comment", "# a", "b"],
   ["section name", "[a", "]"],
 ]) {
-  test(`gitconfig: splitting the character after a decoding failure merges the issue in ${owner}`, () => {
-    const source = Buffer.concat([
-      Buffer.from(prefix),
-      Buffer.from([255]),
-      Buffer.from(`é${suffix}`),
-    ]);
-    const edits = [
-      { byte: Buffer.byteLength(prefix) + 2, deleteBytes: 1, insert: "" },
-    ];
-    const incremental = parse(source, edits);
-    assert.deepEqual(incremental, parse(applyEdits(source, edits)));
-    assert.deepEqual(
-      incremental
-        .filter(({ kind }) => kind === "syntax_issue")
-        .map(({ start, end }) => [start, end]),
-      [[Buffer.byteLength(prefix), Buffer.byteLength(prefix) + 2]],
-    );
-  });
+  for (const bom of ["", "\uFEFF"]) {
+    test(`gitconfig: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
+      const offset = Buffer.byteLength(bom + prefix);
+      const source = Buffer.concat([
+        Buffer.from(bom + prefix),
+        Buffer.from([255]),
+        Buffer.from(`é${suffix}`),
+      ]);
+      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
+      const incremental = parse(source, edits);
+      assert.deepEqual(incremental, parse(applyEdits(source, edits)));
+      assert.deepEqual(
+        incremental
+          .filter(({ kind }) => kind === "syntax_issue")
+          .map(({ start, end }) => [start, end]),
+        [[offset, offset + 2]],
+      );
+    });
+  }
 }
 
 const histories = [

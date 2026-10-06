@@ -89,8 +89,6 @@ function parse(source, edits = []) {
   const nodes = [],
     ancestors = [];
   for (const line of text.split("\n")) {
-    // Both positions are padded to the widest start position of the file; an
-    // end position wider than that is printed unpadded.
     const location =
       /^([0-9]+):([0-9]+)( +)- ([0-9]+):([0-9]+)( +)(([a-z_]+): )?([a-z_]+|ERROR|MISSING|"[^"]*")/.exec(
         line,

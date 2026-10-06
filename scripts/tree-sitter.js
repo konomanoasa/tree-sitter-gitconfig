@@ -102,7 +102,6 @@ function createTreeSitter() {
     mkdirSync(cacheDirectory, { recursive: true });
     mkdirSync(libraryDirectory);
     mkdirSync(treeSitterConfigDirectory, { recursive: true });
-    // CLI discovery requires a tree-sitter-* entry regardless of checkout name.
     copyFiles(
       [
         "tree-sitter.json",
@@ -147,7 +146,7 @@ function createTreeSitter() {
         env: {
           ...process.env,
           ...(process.platform === "darwin"
-            ? { CC: "/opt/homebrew/opt/llvm/bin/clang" }
+            ? { CC: process.env.CC ?? "clang" }
             : {}),
           APPDATA: configDirectory,
           LOCALAPPDATA: cacheDirectory,
@@ -284,7 +283,6 @@ function fuzzParsers(runner, arguments_) {
       process.stderr.write(result.stderr ?? "");
       const status = resultStatus(result);
       if (status !== 0) return status;
-      // The CLI can report failed fuzz cases while returning exit status zero.
       if (
         /^[1-9][0-9]* .+ corpus tests failed fuzzing$/m.test(
           result.stdout + result.stderr,
