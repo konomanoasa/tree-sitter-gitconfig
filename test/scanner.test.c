@@ -108,7 +108,6 @@ static void test_lifecycle_and_serialization_round_trip(void) {
     .mode = COMMENT,
     .comment_return = VARIABLE_TAIL,
     .ready = true,
-    .section = true,
     .value_started = true,
   };
   *scanner = expected;

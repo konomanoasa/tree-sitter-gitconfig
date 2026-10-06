@@ -17,6 +17,8 @@ import { grammars, packageName, root } from "./tree-sitter.js";
 const enumerators = { _eof: "END_OF_FILE" };
 const tokenCount = "ERROR_SENTINEL + 1";
 
+const scannerDiagnosticArguments = [];
+
 const warningArguments = ["-Wall", "-Wextra", "-Werror", "-pedantic"];
 const scannerContract = join(root, "test", "scanner.test.c");
 const contracts = [scannerContract];
@@ -39,18 +41,15 @@ const variants = grammars.map((grammar) => {
   };
 });
 
-function run(
-  command,
-  arguments_,
-  { stdio = "inherit", timeout = 60_000 } = {},
-) {
+function run(command, arguments_, options = {}) {
   const result = spawnSync(command, arguments_, {
     cwd: root,
     encoding: "utf8",
-    timeout,
+    timeout: 60_000,
     killSignal: "SIGKILL",
     maxBuffer: 64 * 1024 * 1024,
-    stdio,
+    stdio: "inherit",
+    ...options,
   });
   if (result.error) {
     throw new Error(
@@ -60,8 +59,11 @@ function run(
   }
   if (result.status !== 0) {
     const diagnostics = (result.stderr || result.stdout || "").trim();
+    const outcome = result.signal
+      ? `terminated by ${result.signal}`
+      : `failed with status ${result.status}`;
     throw new Error(
-      `${command} ${arguments_.join(" ")} failed with status ${result.status ?? 1}${diagnostics ? `\n${diagnostics}` : ""}`,
+      `${command} ${arguments_.join(" ")} ${outcome}${diagnostics ? `\n${diagnostics}` : ""}`,
     );
   }
   return result;
@@ -181,10 +183,9 @@ function checkDiagnostics(clang, clangd, directory) {
         "-I",
         variant.includeDirectory,
         ...warningArguments,
-        // The included scanner's helpers look unused to clangd, which drops
-        // those diagnostics but still counts them toward its error limit.
+        // Clangd checks headers and included helpers without all their callers.
         ...(source === variant.source
-          ? []
+          ? scannerDiagnosticArguments
           : ["-Wno-unused-function", ...variant.contractArguments]),
         "-fsyntax-only",
         source,
@@ -322,6 +323,6 @@ function main(arguments_) {
 try {
   main(process.argv.slice(2));
 } catch (error) {
-  console.error(error.message);
+  console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }

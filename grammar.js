@@ -53,7 +53,6 @@ export default grammar({
   externals: ($) => [
     $._line_start,
     $._section_start,
-    $._section_end,
     $._blank_start,
     $._variable_start,
     $._comment_start,
@@ -87,13 +86,21 @@ export default grammar({
   extras: ($) => [$._line_start, $._layout, $._unmatchable],
   rules: {
     document: ($) =>
-      repeat(choice($.section, $.blank_line, $.comment, $.variable)),
+      repeat(
+        choice(
+          $.section,
+          $.blank_line,
+          $.comment,
+          alias($._orphan_variable, $.variable),
+        ),
+      ),
     section: ($) =>
-      seq(
-        $._section_start,
-        field("header", $.section_header),
-        repeat(choice($.variable, $.blank_line, $.comment, $.line_ending)),
-        $._section_end,
+      prec.right(
+        seq(
+          $._section_start,
+          field("header", $.section_header),
+          repeat(choice($.variable, $.blank_line, $.comment, $.line_ending)),
+        ),
       ),
     section_header: ($) =>
       seq(
@@ -160,10 +167,15 @@ export default grammar({
         ),
         choice(field("closing", $.quote_close), missing($, "quote_close")),
       ),
-    variable: ($) =>
+    variable: ($) => seq($._variable_start, $._variable_content),
+    _orphan_variable: ($) =>
       seq(
         $._variable_start,
-        optional(issue($, "missing_section_header")),
+        issue($, "missing_section_header"),
+        $._variable_content,
+      ),
+    _variable_content: ($) =>
+      seq(
         choice(
           field("name", $.variable_name),
           issue($, "missing_variable_name"),

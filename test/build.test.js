@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -12,9 +13,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { copyFiles, packageName, root } from "../scripts/tree-sitter.js";
+import {
+  copyFiles,
+  createTreeSitter,
+  packageName,
+  root,
+} from "../scripts/tree-sitter.js";
 
-const configuration = JSON.parse(readFileSync(join(root, "tree-sitter.json")));
+const configuration = JSON.parse(
+  readFileSync(join(root, "tree-sitter.json"), "utf8"),
+);
 const grammars = configuration.grammars.map((grammar) => ({
   ...grammar,
   externalFiles: [].concat(grammar["external-files"] ?? []),
@@ -201,6 +209,16 @@ test(`${language}: corpus fuzz propagates CLI failures even when its exit status
       expectedStatus: 1,
       expectedDiagnostic: "Tree-sitter CLI terminated by SIGTERM.\n",
     },
+    {
+      name: "timeout retains the captured output",
+      status: null,
+      signal: "SIGKILL",
+      error: { code: "ETIMEDOUT", message: "spawnSync tree-sitter ETIMEDOUT" },
+      stdout: "fuzz progress\n",
+      stderr: "fuzz log\n",
+      expectedStatus: 1,
+      expectedDiagnostic: "spawnSync tree-sitter ETIMEDOUT\n",
+    },
   ];
   try {
     for (const fixture of fixtures) {
@@ -210,6 +228,9 @@ test(`${language}: corpus fuzz propagates CLI failures even when its exit status
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 const fixture = ${JSON.stringify(fixture)};
+if (fixture.error) {
+  fixture.error = Object.assign(new Error(fixture.error.message), fixture.error);
+}
 childProcess.spawnSync = (_command, arguments_) => {
   if (arguments_.includes("build")) return { status: 0, stdout: "", stderr: "" };
   if (arguments_.includes("fuzz")) return fixture;
@@ -253,7 +274,7 @@ syncBuiltinESMExports();
 
 test(`${language}: package metadata matches the grammar and license`, () => {
   const { metadata } = configuration;
-  const pkg = JSON.parse(readFileSync(join(root, "package.json")));
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   for (const key of ["version", "license", "description"])
     assert.equal(pkg[key], metadata[key]);
   assert.equal(pkg.repository, `git+${metadata.links.repository}.git`);
@@ -262,4 +283,108 @@ test(`${language}: package metadata matches the grammar and license`, () => {
       `${pkg.license} License`,
     ),
   );
+});
+
+function run(command, arguments_, cwd = root) {
+  const result = spawnSync(command, arguments_, {
+    cwd,
+    encoding: "utf8",
+    timeout: 120000,
+    maxBuffer: 64 * 1024 * 1024,
+    killSignal: "SIGKILL",
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  return result.stdout;
+}
+
+test("npm and Cargo archives contain buildable bindings for every language", () => {
+  const cache = join(root, "node_modules", ".cache");
+  mkdirSync(cache, { recursive: true });
+  const directory = mkdtempSync(join(cache, `${packageName}-distribution-`));
+  const runner = createTreeSitter();
+  try {
+    const npm = process.env.npm_execpath;
+    assert.ok(npm, "Run distribution checks through npm test.");
+    const [archive] = Object.values(
+      JSON.parse(
+        run(process.execPath, [
+          npm,
+          "pack",
+          "--json",
+          "--ignore-scripts",
+          "--pack-destination",
+          directory,
+        ]),
+      ),
+    );
+    const npmRoot = join(directory, "npm");
+    mkdirSync(npmRoot);
+    run("tar", ["-xf", join(directory, archive.filename), "-C", npmRoot]);
+    const npmSource = join(npmRoot, "package");
+    for (const { name, path } of grammars) {
+      const output = join(directory, "generated", name);
+      mkdirSync(output, { recursive: true });
+      const result = runner.run(
+        [
+          "generate",
+          join(npmSource, path, "grammar.js"),
+          "--abi",
+          "latest",
+          "--output",
+          output,
+        ],
+        { cwd: npmSource },
+      );
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      for (const file of ["parser.c", "grammar.json", "node-types.json"]) {
+        assert.deepEqual(
+          readFileSync(join(output, file)),
+          readFileSync(join(npmSource, path, "src", file)),
+          `${name}: ${file}`,
+        );
+      }
+    }
+
+    const cargoTarget = join(directory, "cargo-package");
+    run("cargo", [
+      "package",
+      "--locked",
+      "--offline",
+      "--allow-dirty",
+      "--no-verify",
+      "--target-dir",
+      cargoTarget,
+    ]);
+    const packageDirectory = join(cargoTarget, "package");
+    const archives = readdirSync(packageDirectory).filter((name) =>
+      name.endsWith(".crate"),
+    );
+    assert.equal(archives.length, 1);
+    const cargoRoot = join(directory, "cargo");
+    mkdirSync(cargoRoot);
+    run("tar", ["-xf", join(packageDirectory, archives[0]), "-C", cargoRoot]);
+    const cargoSource = join(cargoRoot, archives[0].slice(0, -".crate".length));
+
+    for (const source of [npmSource, cargoSource]) {
+      const output = run("cargo", [
+        "test",
+        "--offline",
+        "--manifest-path",
+        join(source, "Cargo.toml"),
+        "--target-dir",
+        join(directory, "build"),
+        "--test",
+        "bindings",
+        "parses_valid_source",
+        "--",
+        "--exact",
+      ]);
+      assert.match(output, /^test result: ok[.] 1 passed;/m);
+    }
+  } finally {
+    runner.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

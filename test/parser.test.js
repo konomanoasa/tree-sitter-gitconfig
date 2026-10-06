@@ -9,6 +9,8 @@ import { issues, leaves, owners, parse } from "./support/parser.js";
 
 test("gitconfig: public issue nodes have one outcome and one reason leaf", () => {
   const issue = nodeTypes.find(({ type }) => type === "syntax_issue");
+  assert.ok(issue);
+  assert.ok(issue.children);
   assert.equal(issue.children.required, true);
   assert.equal(issue.children.multiple, false);
   assert.deepEqual(
@@ -17,10 +19,13 @@ test("gitconfig: public issue nodes have one outcome and one reason leaf", () =>
   );
   for (const { type } of issue.children.types) {
     const outcome = nodeTypes.find((node) => node.type === type);
+    assert.ok(outcome, type);
+    assert.ok(outcome.children, type);
     assert.equal(outcome.children.required, true);
     assert.equal(outcome.children.multiple, false);
     for (const child of outcome.children.types) {
       const reason = nodeTypes.find((node) => node.type === child.type);
+      assert.ok(reason, child.type);
       assert.equal(reason.children, undefined);
     }
   }
@@ -140,6 +145,54 @@ for (const [name, source] of validCases) {
   test(`gitconfig: ${name}`, () => assert.deepEqual(issues(parse(source)), []));
 }
 const invalidCases = [
+  [
+    "contiguous forbidden section name characters form one issue",
+    "[co@@re]",
+    [["invalid_syntax", "invalid_name_character", 3, 5]],
+    ["section_name"],
+  ],
+  [
+    "normal section name characters separate issues",
+    "[co@r@e]",
+    [
+      ["invalid_syntax", "invalid_name_character", 3, 4],
+      ["invalid_syntax", "invalid_name_character", 5, 6],
+    ],
+    ["section_name", "section_name"],
+  ],
+  [
+    "contiguous forbidden variable name characters form one issue",
+    "[x]\na@@b=1",
+    [["invalid_syntax", "invalid_name_character", 5, 7]],
+    ["variable_name"],
+  ],
+  [
+    "contiguous forbidden legacy subsection characters form one issue",
+    "[x.@@y]",
+    [["invalid_syntax", "invalid_name_character", 3, 5]],
+    ["subsection"],
+  ],
+  [
+    "contiguous NUL characters in a subsection form one issue",
+    '[x "a\0\0b"]',
+    [["invalid_syntax", "invalid_subsection_character", 5, 7]],
+    ["subsection"],
+  ],
+  [
+    "a forbidden initial digit does not absorb valid name characters",
+    "[x] 12a=1",
+    [["invalid_syntax", "invalid_name_character", 4, 5]],
+    ["variable_name"],
+  ],
+  [
+    "adjacent invalid escapes remain independent",
+    "[x] a=\\q\\z",
+    [
+      ["invalid_syntax", "invalid_escape", 6, 8],
+      ["invalid_syntax", "invalid_escape", 8, 10],
+    ],
+    ["value", "value"],
+  ],
   [
     "space after the opening bracket preserves the section name",
     "[ core]",
@@ -401,10 +454,10 @@ for (const [name, prefix, suffix, owner] of [
   ["after subsection escape", '[x "a\\', 'b"]', "subsection"],
   ["header tail", '[x "a"', "]", "section_header"],
 ]) {
-  test(`gitconfig: invalid UTF-8 in ${name}`, () => {
+  test(`gitconfig: invalid UTF-8 runs in ${name}`, () => {
     const source = Buffer.concat([
       Buffer.from(prefix),
-      Buffer.from([255]),
+      Buffer.from([255, 254, 128]),
       Buffer.from(suffix),
     ]);
     const tree = parse(source);
@@ -413,7 +466,7 @@ for (const [name, prefix, suffix, owner] of [
         "invalid_syntax",
         "invalid_encoding",
         Buffer.byteLength(prefix),
-        Buffer.byteLength(prefix) + 1,
+        Buffer.byteLength(prefix) + 3,
       ],
     ]);
     assert.deepEqual(owners(tree), [owner]);
@@ -544,72 +597,96 @@ test("gitconfig: trailing value spaces belong to the variable but not value text
   );
 });
 
-for (const [name, source, expected, expectedIssues = []] of [
-  ["leading spaces after continuation", "[x] a=\\\n  c\n", [[10, 11, "c"]]],
-  [
-    "leading tab after CRLF continuation",
-    "[x] a=\\\r\n\tc\r\n",
-    [[10, 11, "c"]],
-  ],
-  [
-    "leading spaces across continuations",
-    "[x] a=\\\n \\\n  c",
-    [[13, 14, "c"]],
-  ],
-  ["empty quotes after continuation", '[x] a=\\\n  "" c', [[13, 14, "c"]]],
-  ["empty quotes before continuation", '[x] a=""\\\n  c', [[12, 13, "c"]]],
-  ["empty quotes before leading spaces", '[x] a=""  c', [[10, 11, "c"]]],
-  [
-    "internal spaces after continuation",
-    "[x] a=b\\\n  c",
-    [
+for (const { name, source, expected, expectedIssues = [] } of [
+  {
+    name: "leading spaces after continuation",
+    source: "[x] a=\\\n  c\n",
+    expected: [[10, 11, "c"]],
+  },
+  {
+    name: "leading tab after CRLF continuation",
+    source: "[x] a=\\\r\n\tc\r\n",
+    expected: [[10, 11, "c"]],
+  },
+  {
+    name: "leading spaces across continuations",
+    source: "[x] a=\\\n \\\n  c",
+    expected: [[13, 14, "c"]],
+  },
+  {
+    name: "empty quotes after continuation",
+    source: '[x] a=\\\n  "" c',
+    expected: [[13, 14, "c"]],
+  },
+  {
+    name: "empty quotes before continuation",
+    source: '[x] a=""\\\n  c',
+    expected: [[12, 13, "c"]],
+  },
+  {
+    name: "empty quotes before leading spaces",
+    source: '[x] a=""  c',
+    expected: [[10, 11, "c"]],
+  },
+  {
+    name: "internal spaces after continuation",
+    source: "[x] a=b\\\n  c",
+    expected: [
       [6, 7, "b"],
       [9, 12, "  c"],
     ],
-  ],
-  [
-    "escaped content before continuation",
-    "[x] a=\\t\\\n  c",
-    [[10, 13, "  c"]],
-  ],
-  ["quoted spaces after continuation", '[x] a="\\\n  c"', [[9, 12, "  c"]]],
-  [
-    "quoted content before continuation",
-    '[x] a=" "\\\n  c',
-    [
+  },
+  {
+    name: "escaped content before continuation",
+    source: "[x] a=\\t\\\n  c",
+    expected: [[10, 13, "  c"]],
+  },
+  {
+    name: "quoted spaces after continuation",
+    source: '[x] a="\\\n  c"',
+    expected: [[9, 12, "  c"]],
+  },
+  {
+    name: "quoted content before continuation",
+    source: '[x] a=" "\\\n  c',
+    expected: [
       [7, 8, " "],
       [11, 14, "  c"],
     ],
-  ],
-  ["continued whitespace before comment", "[x] a=\\\n  #comment", []],
-  [
-    "leading spaces in the next variable",
-    "[x] a=b\nnext=\\\n  c",
-    [
+  },
+  {
+    name: "continued whitespace before comment",
+    source: "[x] a=\\\n  #comment",
+    expected: [],
+  },
+  {
+    name: "leading spaces in the next variable",
+    source: "[x] a=b\nnext=\\\n  c",
+    expected: [
       [6, 7, "b"],
       [17, 18, "c"],
     ],
-  ],
-  [
-    "internal and trailing spaces after continuation",
-    "[x] a=b\\\n \tc \t#tail",
-    [
+  },
+  {
+    name: "internal and trailing spaces after continuation",
+    source: "[x] a=b\\\n \tc \t#tail",
+    expected: [
       [6, 7, "b"],
       [9, 12, " \tc"],
     ],
-  ],
-  [
-    "invalid escape before continuation",
-    "[x] a=\\q\\\n  c",
-    [[10, 13, "  c"]],
-    [["invalid_syntax", "invalid_escape", 6, 8]],
-  ],
-  [
-    "invalid encoding before continuation",
-    Buffer.from([91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99]),
-    [[9, 12, "  c"]],
-    [["invalid_syntax", "invalid_encoding", 6, 7]],
-  ],
+  },
+  {
+    name: "invalid escape before continuation",
+    source: "[x] a=\\q\\\n  c",
+    expected: [[10, 13, "  c"]],
+    expectedIssues: [["invalid_syntax", "invalid_escape", 6, 8]],
+  },
+  {
+    name: "invalid encoding before continuation",
+    source: Buffer.from([91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99]),
+    expected: [[9, 12, "  c"]],
+    expectedIssues: [["invalid_syntax", "invalid_encoding", 6, 7]],
+  },
 ]) {
   test(`gitconfig: ${name} preserve value text ranges`, () => {
     const nodes = parse(source);
@@ -760,9 +837,16 @@ const largeInputCases = [
   ["long trailing whitespace", `[x]\na=b${" ".repeat(200000)}`, 0],
   ["many continuations", `[x]\na=${"a\\\n".repeat(10000)}end`, 0],
   ["many invalid quotes", '[x]\na="b\n'.repeat(10000), 10000],
-  ["many invalid name characters", `[x]\n${"_".repeat(10000)}=1`, 10000],
 ];
 for (const [name, source, expectedIssues] of largeInputCases) {
   test(`gitconfig: large input: ${name}`, () =>
     assert.equal(issues(parse(source)).length, expectedIssues));
 }
+
+test("gitconfig: a long invalid name run forms one issue with its full range", () => {
+  const tree = parse(`[x]\n${"_".repeat(10000)}=1`);
+  assert.deepEqual(issues(tree), [
+    ["invalid_syntax", "invalid_name_character", 4, 10004],
+  ]);
+  assert.deepEqual(owners(tree), ["variable_name"]);
+});

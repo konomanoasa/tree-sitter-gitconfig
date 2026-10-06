@@ -6,7 +6,6 @@
 enum Token {
   LINE_START,
   SECTION_START,
-  SECTION_END,
   BLANK_START,
   VARIABLE_START,
   COMMENT_START,
@@ -86,7 +85,7 @@ enum Mode {
 typedef struct {
   uint32_t position, content_end, line_end, subsection_at;
   uint32_t mode, comment_return;
-  uint32_t ready, section, first, separated, value_started;
+  uint32_t ready, first, separated, value_started;
 } Scanner;
 
 typedef char scanner_fits_buffer
@@ -119,7 +118,13 @@ static bool emit(TSLexer *lexer, const bool *valid, enum Token token) {
 }
 static bool
 take(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
-  advance(s, lexer);
+  do {
+    advance(s, lexer);
+  } while (
+    !at_end(s) &&
+    ((token == INVALID_ENCODING && lexer->lookahead == -1) ||
+      (token == INVALID_SUBSECTION_CHARACTER && lexer->lookahead == 0))
+  );
   lexer->mark_end(lexer);
   return emit(lexer, valid, token);
 }
@@ -272,27 +277,16 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
     int32_t c = lexer->lookahead;
     switch ((enum Mode)s->mode) {
     case START: {
-      if (lexer->eof(lexer)) {
-        if (!s->section)
-          return false;
-        s->section = false;
-        return emit(lexer, valid, SECTION_END);
-      }
+      if (lexer->eof(lexer))
+        return false;
       while (!at_end(s) && space(lexer->lookahead))
         advance(s, lexer);
-      if (!at_end(s) && lexer->lookahead == '[' && s->section) {
-        // Zero-width at the line start; the line is rescanned afterwards.
-        s->position = 0;
-        s->section = false;
-        return emit(lexer, valid, SECTION_END);
-      }
       lexer->mark_end(lexer);
       if (at_end(s)) {
         s->mode = BLANK;
         return emit(lexer, valid, BLANK_START);
       }
       if (lexer->lookahead == '[') {
-        s->section = true;
         s->mode = HEADER_OPEN;
         return emit(lexer, valid, SECTION_START);
       }
@@ -338,14 +332,22 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
                                         : VARIABLE_AFTER_NAME;
         return emit(lexer, valid, legacy ? SUBSECTION_END : NAME_END);
       }
-      if (c == -1 || !name_character(s, c)) {
+      if (c == -1) {
         s->first = false;
-        return take(
-          s,
-          lexer,
-          valid,
-          c == -1 ? INVALID_ENCODING : INVALID_NAME_CHARACTER
+        return take(s, lexer, valid, INVALID_ENCODING);
+      }
+      if (!name_character(s, c)) {
+        do {
+          advance(s, lexer);
+          s->first = false;
+        } while (
+          !name_boundary(s, lexer->lookahead) &&
+          lexer->lookahead !=
+          -1 &&
+          !name_character(s, lexer->lookahead)
         );
+        lexer->mark_end(lexer);
+        return emit(lexer, valid, INVALID_NAME_CHARACTER);
       }
       do {
         advance(s, lexer);
@@ -422,7 +424,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
       return emit(lexer, valid, VARIABLE_START);
     case VARIABLE_HEADER:
       s->mode = VARIABLE_NAME;
-      if (!s->section)
+      if (valid[MISSING_SECTION_HEADER])
         return emit(lexer, valid, MISSING_SECTION_HEADER);
       continue;
     case VARIABLE_AFTER_NAME:

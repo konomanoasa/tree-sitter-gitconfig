@@ -57,7 +57,11 @@ function treeSitterExecutable() {
       process.platform === "win32" ? "tree-sitter.exe" : "tree-sitter",
     );
   } catch (error) {
-    if (error.code === "ERR_MODULE_NOT_FOUND") {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ERR_MODULE_NOT_FOUND"
+    ) {
       throw new Error(missingCliMessage, { cause: error });
     }
     throw error;
@@ -142,6 +146,9 @@ function createTreeSitter() {
         ...options,
         env: {
           ...process.env,
+          ...(process.platform === "darwin"
+            ? { CC: "/opt/homebrew/opt/llvm/bin/clang" }
+            : {}),
           APPDATA: configDirectory,
           LOCALAPPDATA: cacheDirectory,
           NO_COLOR: "1",
@@ -216,7 +223,7 @@ function testCorpus(arguments_) {
       "test-corpus deletes its isolated copy; --update, --debug-graph, and --open-log would lose their output.",
     );
   }
-  const testRoot = mkdtempSync(join(root, `.${packageName}-test-`));
+  const testRoot = mkdtempSync(join(tmpdir(), `${packageName}-test-`));
   let runner;
 
   try {
@@ -273,9 +280,9 @@ function fuzzParsers(runner, arguments_) {
           killSignal: "SIGKILL",
         },
       );
+      process.stdout.write(result.stdout ?? "");
+      process.stderr.write(result.stderr ?? "");
       const status = resultStatus(result);
-      process.stdout.write(result.stdout);
-      process.stderr.write(result.stderr);
       if (status !== 0) return status;
       // The CLI can report failed fuzz cases while returning exit status zero.
       if (
@@ -291,6 +298,47 @@ function fuzzParsers(runner, arguments_) {
   }
 }
 
+function checkQueries() {
+  const configuration = JSON.parse(
+    readFileSync(join(root, ".tsqueryrc.json"), "utf8"),
+  );
+  for (const grammar of grammars) {
+    const parserAliases = { ...configuration.parser_aliases };
+    for (const { name } of grammars) {
+      if (name === grammar.name) delete parserAliases[name];
+      else parserAliases[name] = grammar.name;
+    }
+    const directories = [...new Set(grammar.highlights.map(dirname))];
+    const settings = { ...configuration, parser_aliases: parserAliases };
+    const result = spawnSync(
+      "ts_query_ls",
+      [
+        "check",
+        "--format",
+        "--config",
+        JSON.stringify(settings),
+        ...directories,
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+      },
+    );
+    process.stdout.write(result.stdout ?? "");
+    process.stderr.write(result.stderr ?? "");
+    if (result.error) throw result.error;
+    if (result.signal) {
+      process.stderr.write(`ts_query_ls terminated by ${result.signal}.\n`);
+      return 1;
+    }
+    if (result.status !== 0) return result.status ?? 1;
+    console.log(`${grammar.name}: reference queries passed`);
+  }
+  return 0;
+}
+
 function main(arguments_) {
   const [command, ...rest] = arguments_;
   if (command === "generate-all") {
@@ -298,6 +346,12 @@ function main(arguments_) {
       throw new Error("Usage: node scripts/tree-sitter.js generate-all");
     }
     return generateParsers();
+  }
+  if (command === "check-queries") {
+    if (rest.length !== 0) {
+      throw new Error("Usage: node scripts/tree-sitter.js check-queries");
+    }
+    return checkQueries();
   }
   if (command === "test-corpus") {
     return testCorpus(rest);
@@ -318,11 +372,15 @@ function main(arguments_) {
   }
 }
 
+if (import.meta.main === undefined) {
+  throw new Error("Node.js 24.21.0 or later is required.");
+}
+
 if (import.meta.main) {
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (error) {
-    console.error(error.message);
+    console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   }
 }

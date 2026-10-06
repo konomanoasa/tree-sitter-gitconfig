@@ -7,6 +7,11 @@
 [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
 Git configuration files 2.55.0.
 
+## Syntax Issues
+
+The parser detects syntax issues, including missing syntax, while preserving the surrounding structure.
+These issues are represented as `syntax_issue` nodes.
+
 ## Installation
 
 ```sh

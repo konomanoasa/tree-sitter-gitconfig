@@ -68,6 +68,8 @@ function parse(source, edits = []) {
     join(directory, library),
     "--lang-name",
     language,
+    "--encoding",
+    "utf8",
     "--cst",
     path,
     ...(edits.length
