@@ -1,0 +1,948 @@
+==================
+Continuation keeps an apparent header inside the value
+==================
+[x]
+a=b\
+[y]
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) (line_continuation) (value_text)))))
+
+==================
+Continuations and empty quotes preserve leading layout and internal text
+==================
+[x]
+a=\
+  "" \
+  c
+b=d\
+  e
+c="\
+  f"
+---
+
+(document
+  (section
+    header: (section_header
+      opening: (section_open)
+      name: (section_name (name_text))
+      closing: (section_close))
+    (line_ending)
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value
+        (line_continuation)
+        (quoted_value opening: (quote_open) closing: (quote_close))
+        (line_continuation)
+        (value_text))
+      (line_ending))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value (value_text) (line_continuation) (value_text))
+      (line_ending))
+    (variable
+      name: (variable_name (name_text))
+      operator: (assignment_operator)
+      value: (value
+        (quoted_value
+          opening: (quote_open)
+          (line_continuation)
+          (value_text)
+          closing: (quote_close))))))
+
+==================
+EOF CR after a value backslash can complete a continuation
+==================
+[a]
+x=x\
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) issue: (syntax_issue (incomplete_syntax (incomplete_escape)))))))
+
+==================
+Unquoted continuation
+:cst
+==================
+[core]
+name=a\
+[other]
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:4         name: variable_name
+1:0 - 1:4           name_text `name`
+1:4 - 1:5         operator: assignment_operator `=`
+1:5 - 2:7         value: value
+1:5 - 1:6           value_text `a`
+1:6 - 2:0           line_continuation
+1:6 - 1:8             `\\\n`
+2:0 - 2:7           value_text `[other]`
+2:7 - 3:0         line_ending
+2:7 - 2:8           `\n`
+
+==================
+Quoted continuation
+:cst
+==================
+[core]
+name="a\
+b"
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:4         name: variable_name
+1:0 - 1:4           name_text `name`
+1:4 - 1:5         operator: assignment_operator `=`
+1:5 - 2:2         value: value
+1:5 - 2:2           quoted_value
+1:5 - 1:6             opening: quote_open `\"`
+1:6 - 1:7             value_text `a`
+1:7 - 2:0             line_continuation
+1:7 - 1:9               `\\\n`
+2:0 - 2:1             value_text `b`
+2:1 - 2:2             closing: quote_close `\"`
+2:2 - 3:0         line_ending
+2:2 - 2:3           `\n`
+
+==================
+Continuation ends at EOF
+:cst
+==================
+[core]
+name=a\
+
+---
+
+0:0 - 2:0   document
+0:0 - 2:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 2:0       variable
+1:0 - 1:4         name: variable_name
+1:0 - 1:4           name_text `name`
+1:4 - 1:5         operator: assignment_operator `=`
+1:5 - 2:0         value: value
+1:5 - 1:6           value_text `a`
+1:6 - 2:0           line_continuation
+1:6 - 1:8             `\\\n`
+
+==================
+CRLF layout and continuation
+:cst
+==================
+[core]
+name=a\
+b
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:8         `\r\n`
+1:0 - 3:0       variable
+1:0 - 1:4         name: variable_name
+1:0 - 1:4           name_text `name`
+1:4 - 1:5         operator: assignment_operator `=`
+1:5 - 2:1         value: value
+1:5 - 1:6           value_text `a`
+1:6 - 2:0           line_continuation
+1:6 - 1:9             `\\\r\n`
+2:0 - 2:1           value_text `b`
+2:1 - 3:0         line_ending
+2:1 - 2:3           `\r\n`
+
+==================
+EOF ends quote after completed continuation
+:cst
+==================
+[x] a="b\
+
+---
+
+0:0 - 1:0   document
+0:0 - 1:0     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:0       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:0         value: value
+0:6 - 1:0           quoted_value
+0:6 - 0:7             opening: quote_open `\"`
+0:7 - 0:8             value_text `b`
+0:8 - 1:0             line_continuation
+0:8 - 0:10               `\\\n`
+1:0 - 1:0             issue: syntax_issue
+1:0 - 1:0               incomplete_syntax
+1:0 - 1:0                 missing_quote_close
+
+==================
+Whitespace after a continuation precedes the comment
+:cst
+==================
+[x] a=\
+  #tail
+---
+
+0:0 - 1:7   document
+0:0 - 1:7     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:7       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:0         value: value
+0:6 - 1:0           line_continuation
+0:6 - 0:8             `\\\n`
+1:2 - 1:7         comment
+1:2 - 1:3           comment_marker `#`
+1:3 - 1:7           comment_text `tail`
+
+==================
+Leading spaces after continuation preserve value text ranges
+:cst
+==================
+[x] a=\
+  c
+
+---
+
+0:0 - 2:0   document
+0:0 - 2:0     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 2:0       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 1:0           line_continuation
+0:6 - 0:8             `\\\n`
+1:2 - 1:3           value_text `c`
+1:3 - 2:0         line_ending
+1:3 - 1:4           `\n`
+
+==================
+Leading tab after CRLF continuation preserve value text ranges
+:cst
+==================
+[x] a=\
+	c
+
+---
+
+0:0 - 2:0   document
+0:0 - 2:0     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 2:0       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:2         value: value
+0:6 - 1:0           line_continuation
+0:6 - 0:9             `\\\r\n`
+1:1 - 1:2           value_text `c`
+1:2 - 2:0         line_ending
+1:2 - 1:4           `\r\n`
+
+==================
+Leading spaces across continuations preserve value text ranges
+:cst
+==================
+[x] a=\
+ \
+  c
+---
+
+0:0 - 2:3   document
+0:0 - 2:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 2:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 2:3         value: value
+0:6 - 1:0           line_continuation
+0:6 - 0:8             `\\\n`
+1:1 - 2:0           line_continuation
+1:1 - 1:3             `\\\n`
+2:2 - 2:3           value_text `c`
+
+==================
+Empty quotes after continuation preserve value text ranges
+:cst
+==================
+[x] a=\
+  "" c
+---
+
+0:0 - 1:6   document
+0:0 - 1:6     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:6       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:6         value: value
+0:6 - 1:0           line_continuation
+0:6 - 0:8             `\\\n`
+1:2 - 1:4           quoted_value
+1:2 - 1:3             opening: quote_open `\"`
+1:3 - 1:4             closing: quote_close `\"`
+1:5 - 1:6           value_text `c`
+
+==================
+Empty quotes before continuation preserve value text ranges
+:cst
+==================
+[x] a=""\
+  c
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 0:8           quoted_value
+0:6 - 0:7             opening: quote_open `\"`
+0:7 - 0:8             closing: quote_close `\"`
+0:8 - 1:0           line_continuation
+0:8 - 0:10             `\\\n`
+1:2 - 1:3           value_text `c`
+
+==================
+Internal spaces after continuation preserve value text ranges
+:cst
+==================
+[x] a=b\
+  c
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 0:7           value_text `b`
+0:7 - 1:0           line_continuation
+0:7 - 0:9             `\\\n`
+1:0 - 1:3           value_text `  c`
+
+==================
+Escaped content before continuation preserve value text ranges
+:cst
+==================
+[x] a=\t\
+  c
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 0:8           escape `\\t`
+0:8 - 1:0           line_continuation
+0:8 - 0:10             `\\\n`
+1:0 - 1:3           value_text `  c`
+
+==================
+Quoted spaces after continuation preserve value text ranges
+:cst
+==================
+[x] a="\
+  c"
+---
+
+0:0 - 1:4   document
+0:0 - 1:4     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:4       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:4         value: value
+0:6 - 1:4           quoted_value
+0:6 - 0:7             opening: quote_open `\"`
+0:7 - 1:0             line_continuation
+0:7 - 0:9               `\\\n`
+1:0 - 1:3             value_text `  c`
+1:3 - 1:4             closing: quote_close `\"`
+
+==================
+Quoted content before continuation preserve value text ranges
+:cst
+==================
+[x] a=" "\
+  c
+---
+
+0:0  - 1:3    document
+0:0  - 1:3      section
+0:0  - 0:3        header: section_header
+0:0  - 0:1          opening: section_open `[`
+0:1  - 0:2          name: section_name
+0:1  - 0:2            name_text `x`
+0:2  - 0:3          closing: section_close `]`
+0:3  - 1:3        variable
+0:4  - 0:5          name: variable_name
+0:4  - 0:5            name_text `a`
+0:5  - 0:6          operator: assignment_operator `=`
+0:6  - 1:3          value: value
+0:6  - 0:9            quoted_value
+0:6  - 0:7              opening: quote_open `\"`
+0:7  - 0:8              value_text ` `
+0:8  - 0:9              closing: quote_close `\"`
+0:9  - 1:0            line_continuation
+0:9  - 0:11             `\\\n`
+1:0  - 1:3            value_text `  c`
+
+==================
+Continued whitespace before comment preserve value text ranges
+:cst
+==================
+[x] a=\
+  #comment
+---
+
+0:0  - 1:10   document
+0:0  - 1:10     section
+0:0  - 0:3        header: section_header
+0:0  - 0:1          opening: section_open `[`
+0:1  - 0:2          name: section_name
+0:1  - 0:2            name_text `x`
+0:2  - 0:3          closing: section_close `]`
+0:3  - 1:10       variable
+0:4  - 0:5          name: variable_name
+0:4  - 0:5            name_text `a`
+0:5  - 0:6          operator: assignment_operator `=`
+0:6  - 1:0          value: value
+0:6  - 1:0            line_continuation
+0:6  - 0:8              `\\\n`
+1:2  - 1:10         comment
+1:2  - 1:3            comment_marker `#`
+1:3  - 1:10           comment_text `comment`
+
+==================
+Leading spaces in the next variable preserve value text ranges
+:cst
+==================
+[x] a=b
+next=\
+  c
+---
+
+0:0 - 2:3   document
+0:0 - 2:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:0       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 0:7         value: value
+0:6 - 0:7           value_text `b`
+0:7 - 1:0         line_ending
+0:7 - 0:8           `\n`
+1:0 - 2:3       variable
+1:0 - 1:4         name: variable_name
+1:0 - 1:4           name_text `next`
+1:4 - 1:5         operator: assignment_operator `=`
+1:5 - 2:3         value: value
+1:5 - 2:0           line_continuation
+1:5 - 1:7             `\\\n`
+2:2 - 2:3           value_text `c`
+
+==================
+Internal and trailing spaces after continuation preserve value text ranges
+:cst
+==================
+[x] a=b\
+ 	c 	#tail
+---
+
+0:0  - 1:10   document
+0:0  - 1:10     section
+0:0  - 0:3        header: section_header
+0:0  - 0:1          opening: section_open `[`
+0:1  - 0:2          name: section_name
+0:1  - 0:2            name_text `x`
+0:2  - 0:3          closing: section_close `]`
+0:3  - 1:10       variable
+0:4  - 0:5          name: variable_name
+0:4  - 0:5            name_text `a`
+0:5  - 0:6          operator: assignment_operator `=`
+0:6  - 1:3          value: value
+0:6  - 0:7            value_text `b`
+0:7  - 1:0            line_continuation
+0:7  - 0:9              `\\\n`
+1:0  - 1:3            value_text ` \tc`
+1:5  - 1:10         comment
+1:5  - 1:6            comment_marker `#`
+1:6  - 1:10           comment_text `tail`
+
+==================
+Invalid escape before continuation preserve value text ranges
+:cst
+==================
+[x] a=\q\
+  c
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 0:8           issue: syntax_issue
+0:6 - 0:8             invalid_syntax
+0:6 - 0:8               invalid_escape `\\q`
+0:8 - 1:0           line_continuation
+0:8 - 0:10             `\\\n`
+1:0 - 1:3           value_text `  c`
+
+==================
+Variable in a section with leading spaces after continuation
+:cst
+==================
+[core]
+x=\
+  c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:3         value: value
+1:2 - 2:0           line_continuation
+1:2 - 1:4             `\\\n`
+2:2 - 2:3           value_text `c`
+2:3 - 3:0         line_ending
+2:3 - 2:4           `\n`
+
+==================
+Variable in a section with leading tab after CRLF continuation
+:cst
+==================
+[core]
+x=\
+	c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:2         value: value
+1:2 - 2:0           line_continuation
+1:2 - 1:5             `\\\r\n`
+2:1 - 2:2           value_text `c`
+2:2 - 3:0         line_ending
+2:2 - 2:4           `\r\n`
+
+==================
+Variable in a section with leading spaces across continuations
+:cst
+==================
+[core]
+x=\
+ \
+  c
+
+---
+
+0:0 - 4:0   document
+0:0 - 4:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 4:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 3:3         value: value
+1:2 - 2:0           line_continuation
+1:2 - 1:4             `\\\n`
+2:1 - 3:0           line_continuation
+2:1 - 2:3             `\\\n`
+3:2 - 3:3           value_text `c`
+3:3 - 4:0         line_ending
+3:3 - 3:4           `\n`
+
+==================
+Variable in a section with empty quotes after continuation
+:cst
+==================
+[core]
+x=\
+  "" c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:6         value: value
+1:2 - 2:0           line_continuation
+1:2 - 1:4             `\\\n`
+2:2 - 2:4           quoted_value
+2:2 - 2:3             opening: quote_open `\"`
+2:3 - 2:4             closing: quote_close `\"`
+2:5 - 2:6           value_text `c`
+2:6 - 3:0         line_ending
+2:6 - 2:7           `\n`
+
+==================
+Variable in a section with empty quotes before continuation
+:cst
+==================
+[core]
+x=""\
+  c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:3         value: value
+1:2 - 1:4           quoted_value
+1:2 - 1:3             opening: quote_open `\"`
+1:3 - 1:4             closing: quote_close `\"`
+1:4 - 2:0           line_continuation
+1:4 - 1:6             `\\\n`
+2:2 - 2:3           value_text `c`
+2:3 - 3:0         line_ending
+2:3 - 2:4           `\n`
+
+==================
+Variable in a section with internal spaces after continuation
+:cst
+==================
+[core]
+x=b\
+  c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:3         value: value
+1:2 - 1:3           value_text `b`
+1:3 - 2:0           line_continuation
+1:3 - 1:5             `\\\n`
+2:0 - 2:3           value_text `  c`
+2:3 - 3:0         line_ending
+2:3 - 2:4           `\n`
+
+==================
+Variable in a section with escaped content before continuation
+:cst
+==================
+[core]
+x=\t\
+  c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:3         value: value
+1:2 - 1:4           escape `\\t`
+1:4 - 2:0           line_continuation
+1:4 - 1:6             `\\\n`
+2:0 - 2:3           value_text `  c`
+2:3 - 3:0         line_ending
+2:3 - 2:4           `\n`
+
+==================
+Variable in a section with quoted spaces after continuation
+:cst
+==================
+[core]
+x="\
+  c"
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:4         value: value
+1:2 - 2:4           quoted_value
+1:2 - 1:3             opening: quote_open `\"`
+1:3 - 2:0             line_continuation
+1:3 - 1:5               `\\\n`
+2:0 - 2:3             value_text `  c`
+2:3 - 2:4             closing: quote_close `\"`
+2:4 - 3:0         line_ending
+2:4 - 2:5           `\n`
+
+==================
+Variable in a section with quoted content before continuation
+:cst
+==================
+[core]
+x=" "\
+  c
+
+---
+
+0:0 - 3:0   document
+0:0 - 3:0     section
+0:0 - 0:6       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:5         name: section_name
+0:1 - 0:5           name_text `core`
+0:5 - 0:6         closing: section_close `]`
+0:6 - 1:0       line_ending
+0:6 - 0:7         `\n`
+1:0 - 3:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2         operator: assignment_operator `=`
+1:2 - 2:3         value: value
+1:2 - 1:5           quoted_value
+1:2 - 1:3             opening: quote_open `\"`
+1:3 - 1:4             value_text ` `
+1:4 - 1:5             closing: quote_close `\"`
+1:5 - 2:0           line_continuation
+1:5 - 1:7             `\\\n`
+2:0 - 2:3           value_text `  c`
+2:3 - 3:0         line_ending
+2:3 - 2:4           `\n`
+
+==================
+Variable in a section with continued whitespace before comment
+:cst
+==================
+[core]
+x=\
+  #comment
+
+---
+
+0:0  - 3:0    document
+0:0  - 3:0      section
+0:0  - 0:6        header: section_header
+0:0  - 0:1          opening: section_open `[`
+0:1  - 0:5          name: section_name
+0:1  - 0:5            name_text `core`
+0:5  - 0:6          closing: section_close `]`
+0:6  - 1:0        line_ending
+0:6  - 0:7          `\n`
+1:0  - 3:0        variable
+1:0  - 1:1          name: variable_name
+1:0  - 1:1            name_text `x`
+1:1  - 1:2          operator: assignment_operator `=`
+1:2  - 2:0          value: value
+1:2  - 2:0            line_continuation
+1:2  - 1:4              `\\\n`
+2:2  - 2:10         comment
+2:2  - 2:3            comment_marker `#`
+2:3  - 2:10           comment_text `comment`
+2:10 - 3:0          line_ending
+2:10 - 2:11           `\n`
+
+==================
+Variable in a section with internal and trailing spaces after continuation
+:cst
+==================
+[core]
+x=b\
+ 	c 	#tail
+
+---
+
+0:0  - 3:0    document
+0:0  - 3:0      section
+0:0  - 0:6        header: section_header
+0:0  - 0:1          opening: section_open `[`
+0:1  - 0:5          name: section_name
+0:1  - 0:5            name_text `core`
+0:5  - 0:6          closing: section_close `]`
+0:6  - 1:0        line_ending
+0:6  - 0:7          `\n`
+1:0  - 3:0        variable
+1:0  - 1:1          name: variable_name
+1:0  - 1:1            name_text `x`
+1:1  - 1:2          operator: assignment_operator `=`
+1:2  - 2:3          value: value
+1:2  - 1:3            value_text `b`
+1:3  - 2:0            line_continuation
+1:3  - 1:5              `\\\n`
+2:0  - 2:3            value_text ` \tc`
+2:5  - 2:10         comment
+2:5  - 2:6            comment_marker `#`
+2:6  - 2:10           comment_text `tail`
+2:10 - 3:0          line_ending
+2:10 - 2:11           `\n`

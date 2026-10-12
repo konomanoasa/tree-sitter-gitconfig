@@ -17,26 +17,6 @@ fn parses_valid_source() {
 }
 
 #[test]
-fn linked_scanner_exposes_an_incomplete_escape_at_eof() {
-  let mut parser = Parser::new();
-  parser.set_language(&grammar::LANGUAGE.into()).unwrap();
-  let tree = parser.parse("[x] a=\\", None).unwrap();
-  let root = tree.root_node();
-  assert!(!root.has_error());
-  let variable = root.named_child(0).unwrap().named_child(1).unwrap();
-  let value = variable.child_by_field_name("value").unwrap();
-  let issue = value.child_by_field_name("issue").unwrap();
-  let outcome = issue.named_child(0).unwrap();
-  let reason = outcome.named_child(0).unwrap();
-  assert_eq!(issue.kind(), "syntax_issue");
-  assert_eq!(outcome.kind(), "incomplete_syntax");
-  assert_eq!(reason.kind(), "incomplete_escape");
-  assert_eq!(issue.byte_range(), 6..7);
-  assert_eq!(outcome.byte_range(), 6..7);
-  assert_eq!(reason.byte_range(), 6..7);
-}
-
-#[test]
 fn inserted_nul_preserves_incremental_value_structure_and_range() {
   let mut parser = Parser::new();
   parser.set_language(&grammar::LANGUAGE.into()).unwrap();

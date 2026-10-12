@@ -111,27 +111,30 @@ static void test_lifecycle_and_serialization_round_trip(void) {
     .value_started = true,
   };
   *scanner = expected;
-  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE + 2];
-  memset(buffer, 0x5a, sizeof(buffer));
-  const unsigned length =
-    tree_sitter_gitconfig_external_scanner_serialize(scanner, buffer + 1);
+  enum { GUARD_SIZE = 1, GUARD_BYTE = 0x5a };
+  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE + 2 * GUARD_SIZE];
+  memset(buffer, GUARD_BYTE, sizeof(buffer));
+  const unsigned length = tree_sitter_gitconfig_external_scanner_serialize(
+    scanner,
+    buffer + GUARD_SIZE
+  );
   assert(length == sizeof(Scanner));
   assert(length <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE);
-  assert(buffer[0] == 0x5a);
-  for (size_t index = length + 1; index < sizeof(buffer); index += 1) {
-    assert(buffer[index] == 0x5a);
+  assert(buffer[0] == GUARD_BYTE);
+  for (size_t index = length + GUARD_SIZE; index < sizeof(buffer); index += 1) {
+    assert(buffer[index] == GUARD_BYTE);
   }
   tree_sitter_gitconfig_external_scanner_deserialize(scanner, NULL, 0);
   assert(memcmp(scanner, &initial, sizeof(initial)) == 0);
   tree_sitter_gitconfig_external_scanner_deserialize(
     scanner,
-    buffer + 1,
+    buffer + GUARD_SIZE,
     length
   );
   assert(memcmp(scanner, &expected, sizeof(expected)) == 0);
   tree_sitter_gitconfig_external_scanner_deserialize(
     scanner,
-    buffer + 1,
+    buffer + GUARD_SIZE,
     length - 1
   );
   assert(memcmp(scanner, &initial, sizeof(initial)) == 0);
@@ -148,7 +151,7 @@ static void test_disabled_and_recovery_scans_preserve_state(void) {
     Scanner scanner = {0};
     const Scanner expected = scanner;
     struct MockLexer mock;
-    init_mock_lexer(&mock, input, 3);
+    init_mock_lexer(&mock, input, sizeof(input) / sizeof(input[0]));
     assert(!tree_sitter_gitconfig_external_scanner_scan(
       &scanner,
       &mock.lexer,
@@ -160,6 +163,7 @@ static void test_disabled_and_recovery_scans_preserve_state(void) {
 
 static void test_restored_comment_state_preserves_token_ranges(void) {
   const int32_t input[] = {'#', 'a', 0, '\r', '\n'};
+  const size_t input_length = sizeof(input) / sizeof(input[0]);
   const struct {
     enum Token token;
     size_t start;
@@ -177,7 +181,11 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
     bool valid_symbols[ERROR_SENTINEL + 1] = {false};
     valid_symbols[cases[index].token] = true;
     struct MockLexer mock;
-    init_mock_lexer(&mock, input + cases[index].start, 5 - cases[index].start);
+    init_mock_lexer(
+      &mock,
+      input + cases[index].start,
+      input_length - cases[index].start
+    );
     assert(tree_sitter_gitconfig_external_scanner_scan(
       &scanner,
       &mock.lexer,
@@ -199,6 +207,45 @@ static void test_restored_comment_state_preserves_token_ranges(void) {
   assert(scanner.mode == START);
 }
 
+static void test_line_ending_discards_finished_line_state(void) {
+  const int32_t input[] = {'\r', '\n', 'x'};
+  const struct {
+    enum Mode mode;
+    enum Mode comment_return;
+    enum Mode next_mode;
+  } cases[] = {
+    {VARIABLE_TAIL, VARIABLE_TAIL, START},
+    {COMMENT, START, COMMENT_ENDING},
+  };
+  for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index += 1) {
+    bool valid_symbols[ERROR_SENTINEL + 1] = {false};
+    valid_symbols[LINE_ENDING] = true;
+    Scanner scanner = {
+      .position = 4,
+      .content_end = 4,
+      .line_end = 6,
+      .subsection_at = 2,
+      .mode = cases[index].mode,
+      .comment_return = cases[index].comment_return,
+      .ready = true,
+      .first = true,
+      .separated = true,
+      .value_started = true,
+    };
+    const Scanner expected = {.mode = cases[index].next_mode};
+    struct MockLexer mock;
+    init_mock_lexer(&mock, input, sizeof(input) / sizeof(input[0]));
+    assert(tree_sitter_gitconfig_external_scanner_scan(
+      &scanner,
+      &mock.lexer,
+      valid_symbols
+    ));
+    assert(mock.lexer.result_symbol == LINE_ENDING);
+    assert(mock.mark == 2);
+    assert(memcmp(&scanner, &expected, sizeof(expected)) == 0);
+  }
+}
+
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
 static void test_reuse_allocator_failure_and_cleanup(void) {
   assert(reuse_live_allocations == 0);
@@ -218,6 +265,7 @@ int main(void) {
   test_lifecycle_and_serialization_round_trip();
   test_disabled_and_recovery_scans_preserve_state();
   test_restored_comment_state_preserves_token_ranges();
+  test_line_ending_discards_finished_line_state();
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
   test_reuse_allocator_failure_and_cleanup();
 #endif

@@ -83,15 +83,16 @@ enum Mode {
   BLANK
 };
 
-// Positions count characters from the line start; uint32_t avoids padding.
+#define NONE UINT32_MAX
+
+// Positions are line-relative; 24 bytes fit Tree-sitter's inline state.
 typedef struct {
   uint32_t position, content_end, line_end, subsection_at;
-  uint32_t mode, comment_return;
-  uint32_t ready, first, separated, value_started;
+  uint16_t mode, comment_return;
+  uint8_t ready, first, separated, value_started;
 } Scanner;
 
-typedef char scanner_fits_buffer
-  [sizeof(Scanner) <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE ? 1 : -1];
+typedef char scanner_fits_inline_state[sizeof(Scanner) == 24 ? 1 : -1];
 
 static bool space(int32_t c) {
   return c == ' ' || c == '\t';
@@ -120,12 +121,12 @@ absent(TSLexer *lexer, enum Token missing, enum Token incomplete) {
 
 static bool header_name(const Scanner *s) {
   switch ((enum Mode)s->mode) {
-  case HEADER_NAME:
-  case HEADER_NAME_TEXT:
-  case LEGACY_SUBSECTION:
-    return true;
-  default:
-    return false;
+    case HEADER_NAME:
+    case HEADER_NAME_TEXT:
+    case LEGACY_SUBSECTION:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -134,25 +135,20 @@ static bool header_delimiter(int32_t c) {
 }
 
 static bool name_boundary(const Scanner *s, int32_t c) {
-  if (at_end(s))
-    return true;
+  if (at_end(s)) return true;
   if (header_name(s))
     return s->position == s->subsection_at || header_delimiter(c);
   return space(c) || comment(c) || c == '=';
 }
 
 static bool name_character(const Scanner *s, int32_t c) {
-  if (!header_name(s) && s->first)
-    return alpha(c);
+  if (!header_name(s) && s->first) return alpha(c);
   return alpha(c) || digit(c) || c == '-' || (header_name(s) && c == '.');
 }
 
 static bool trailing_cr(const Scanner *s, int32_t c) {
-  return c ==
-    '\r' &&
-    s->position +
-    1 ==
-    s->content_end &&
+  return c == '\r' &&
+    s->position + 1 == s->content_end &&
     s->content_end == s->line_end;
 }
 
@@ -161,8 +157,7 @@ static bool header_junk(const Scanner *s, int32_t c) {
 }
 
 static bool text_end(bool subsection, bool quoted, int32_t c) {
-  if (c == '"' || c == '\\' || c == -1)
-    return true;
+  if (c == '"' || c == '\\' || c == -1) return true;
   return (subsection && c == 0) || (!quoted && comment(c));
 }
 
@@ -171,30 +166,36 @@ static void advance(Scanner *s, TSLexer *lexer) {
   s->position++;
 }
 
+static void skip_spaces(Scanner *s, TSLexer *lexer) {
+  while (!at_end(s) && space(lexer->lookahead)) advance(s, lexer);
+}
+
 static bool emit(TSLexer *lexer, const bool *valid, enum Token token) {
-  if (!valid[token])
-    return false;
+  if (!valid[token]) return false;
   lexer->result_symbol = token;
   return true;
 }
 
+// Include the next decoded character so edits invalidate the run.
+static bool invalid_run(Scanner *s, TSLexer *lexer, const bool *valid) {
+  do advance(s, lexer);
+  while (!lexer->eof(lexer) && lexer->lookahead == -1);
+  lexer->mark_end(lexer);
+  if (!lexer->eof(lexer)) lexer->advance(lexer, false);
+  return emit(lexer, valid, INVALID_ENCODING);
+}
+
 static bool
 take(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
-  do {
-    advance(s, lexer);
-  } while (
-    !at_end(s) &&
-    ((token == INVALID_ENCODING && lexer->lookahead == -1) ||
-      (token == INVALID_SUBSECTION_CHARACTER && lexer->lookahead == 0))
+  do advance(s, lexer);
+  while (
+    token == INVALID_SUBSECTION_CHARACTER && !at_end(s) && lexer->lookahead == 0
   );
   lexer->mark_end(lexer);
-  // Include the next decoded character so edits invalidate this run.
-  if (token == INVALID_ENCODING && !lexer->eof(lexer))
-    lexer->advance(lexer, false);
   return emit(lexer, valid, token);
 }
 
-static bool line_start(Scanner *s, TSLexer *lexer, const bool *valid) {
+static bool start_line(Scanner *s, TSLexer *lexer, const bool *valid) {
   s->position = 0;
   int32_t last = 0;
   lexer->mark_end(lexer);
@@ -203,8 +204,7 @@ static bool line_start(Scanner *s, TSLexer *lexer, const bool *valid) {
     advance(s, lexer);
   }
   s->content_end = s->position;
-  if (last == '\r' && !lexer->eof(lexer))
-    s->content_end--;
+  if (last == '\r' && !lexer->eof(lexer)) s->content_end--;
   s->line_end = s->position + (!lexer->eof(lexer) ? 1 : 0);
   s->position = 0;
   s->ready = true;
@@ -213,22 +213,22 @@ static bool line_start(Scanner *s, TSLexer *lexer, const bool *valid) {
 
 static bool
 finish_line(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
-  while (s->position < s->line_end)
-    advance(s, lexer);
+  while (s->position < s->line_end) advance(s, lexer);
   lexer->mark_end(lexer);
   s->ready = false;
   return emit(lexer, valid, token);
 }
 
+// Clear finished-line state to preserve reuse after edits.
 static bool end_line(Scanner *s, TSLexer *lexer, const bool *valid) {
-  if (lexer->eof(lexer))
-    return emit(lexer, valid, END_OF_FILE);
-  return finish_line(s, lexer, valid, LINE_ENDING);
+  if (lexer->eof(lexer)) return emit(lexer, valid, END_OF_FILE);
+  const bool ended = finish_line(s, lexer, valid, LINE_ENDING);
+  *s = (Scanner){.mode = s->mode};
+  return ended;
 }
 
 static bool layout(Scanner *s, TSLexer *lexer, const bool *valid) {
-  while (!at_end(s) && space(lexer->lookahead))
-    advance(s, lexer);
+  skip_spaces(s, lexer);
   lexer->mark_end(lexer);
   return emit(lexer, valid, LAYOUT);
 }
@@ -241,8 +241,7 @@ static bool start_comment(Scanner *s, TSLexer *lexer, const bool *valid) {
 
 static bool header_space(Scanner *s, TSLexer *lexer, const bool *valid) {
   const uint32_t start = s->position;
-  while (!at_end(s) && space(lexer->lookahead))
-    advance(s, lexer);
+  skip_spaces(s, lexer);
   if (s->mode == HEADER_NAME) {
     lexer->mark_end(lexer);
     return emit(lexer, valid, UNEXPECTED_HEADER_CONTENT);
@@ -254,19 +253,17 @@ static bool header_space(Scanner *s, TSLexer *lexer, const bool *valid) {
     s->separated = true;
     return emit(lexer, valid, LAYOUT);
   }
-  // Replay rejected whitespace as header content.
   s->position = start;
   s->mode = HEADER_TAIL;
   return emit(lexer, valid, HEADER_TAIL_START);
 }
 
 static uint32_t legacy_separator(const Scanner *s, TSLexer *lexer) {
-  uint32_t separator = UINT32_MAX;
+  uint32_t separator = NONE;
   uint32_t position = s->position;
   while (position < s->content_end && !header_delimiter(lexer->lookahead)) {
     const bool dot = lexer->lookahead == '.' && position > s->position;
-    if (dot && separator == UINT32_MAX)
-      separator = position;
+    if (dot && separator == NONE) separator = position;
     lexer->advance(lexer, false);
     position++;
   }
@@ -274,8 +271,7 @@ static uint32_t legacy_separator(const Scanner *s, TSLexer *lexer) {
     lexer->advance(lexer, false);
     position++;
   }
-  if (position < s->content_end && lexer->lookahead == '"')
-    return UINT32_MAX;
+  if (position < s->content_end && lexer->lookahead == '"') return NONE;
   return separator;
 }
 
@@ -285,8 +281,7 @@ escape(Scanner *s, TSLexer *lexer, const bool *valid, bool subsection) {
   lexer->mark_end(lexer);
   if (!subsection && at_end(s) && !lexer->eof(lexer))
     return finish_line(s, lexer, valid, LINE_CONTINUATION);
-  if (!subsection)
-    s->value_started = true;
+  if (!subsection) s->value_started = true;
   if (at_end(s))
     return emit(lexer, valid, absent(lexer, ENDED_ESCAPE, INCOMPLETE_ESCAPE));
   const int32_t c = lexer->lookahead;
@@ -298,294 +293,286 @@ escape(Scanner *s, TSLexer *lexer, const bool *valid, bool subsection) {
   return take(s, lexer, valid, subsection || known ? ESCAPE : INVALID_ESCAPE);
 }
 
+static bool start_content(Scanner *s, TSLexer *lexer, const bool *valid) {
+  if (lexer->eof(lexer)) return false;
+  skip_spaces(s, lexer);
+  lexer->mark_end(lexer);
+  if (at_end(s)) {
+    s->mode = BLANK;
+    return emit(lexer, valid, BLANK_START);
+  }
+  if (lexer->lookahead == '[') {
+    s->mode = HEADER_OPEN;
+    return emit(lexer, valid, SECTION_START);
+  }
+  if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
+  s->mode = VARIABLE_HEADER;
+  return emit(lexer, valid, VARIABLE_START);
+}
+
+static bool name_start(Scanner *s, TSLexer *lexer, const bool *valid) {
+  const bool header = s->mode == HEADER_NAME;
+  const int32_t c = lexer->lookahead;
+  if (header && !at_end(s) && space(c)) return header_space(s, lexer, valid);
+  s->first = true;
+  s->separated = false;
+  if (name_boundary(s, c)) {
+    s->mode = header ? HEADER_AFTER_NAME : VARIABLE_AFTER_NAME;
+    return emit(
+      lexer,
+      valid,
+      header ? absent(lexer, MISSING_SECTION_NAME, INCOMPLETE_SECTION_NAME)
+             : MISSING_VARIABLE_NAME
+    );
+  }
+  if (header) s->subsection_at = legacy_separator(s, lexer);
+  s->mode = header ? HEADER_NAME_TEXT : VARIABLE_NAME_TEXT;
+  return emit(lexer, valid, NAME_START);
+}
+
+static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
+  const bool legacy = s->mode == LEGACY_SUBSECTION;
+  const int32_t c = lexer->lookahead;
+  if (name_boundary(s, c)) {
+    s->mode = legacy                ? HEADER_CLOSE
+      : s->mode == HEADER_NAME_TEXT ? HEADER_AFTER_NAME
+                                    : VARIABLE_AFTER_NAME;
+    return emit(lexer, valid, legacy ? SUBSECTION_END : NAME_END);
+  }
+  if (c == -1) {
+    s->first = false;
+    return invalid_run(s, lexer, valid);
+  }
+  if (trailing_cr(s, c)) {
+    s->first = false;
+    return take(s, lexer, valid, INCOMPLETE_NAME_CHARACTER);
+  }
+  const bool valid_name = name_character(s, c);
+  do {
+    advance(s, lexer);
+    s->first = false;
+  } while (
+    !name_boundary(s, lexer->lookahead) &&
+    lexer->lookahead != -1 &&
+    name_character(s, lexer->lookahead) == valid_name &&
+    !trailing_cr(s, lexer->lookahead)
+  );
+  lexer->mark_end(lexer);
+  return emit(
+    lexer,
+    valid,
+    valid_name ? (legacy ? SUBSECTION_TEXT : NAME_TEXT) : INVALID_NAME_CHARACTER
+  );
+}
+
+static bool header_tail(Scanner *s, TSLexer *lexer, const bool *valid) {
+  const int32_t c = lexer->lookahead;
+  if (at_end(s) || comment(c)) {
+    s->mode = AFTER_HEADER;
+    return emit(
+      lexer,
+      valid,
+      absent(lexer, MISSING_SECTION_CLOSE, INCOMPLETE_SECTION_CLOSE)
+    );
+  }
+  if (c == ']') {
+    s->mode = AFTER_HEADER;
+    return take(s, lexer, valid, SECTION_CLOSE);
+  }
+  if (c == -1) return invalid_run(s, lexer, valid);
+  if (trailing_cr(s, c))
+    return take(s, lexer, valid, INCOMPLETE_HEADER_CONTENT);
+  do advance(s, lexer);
+  while (header_junk(s, lexer->lookahead));
+  lexer->mark_end(lexer);
+  return emit(lexer, valid, UNEXPECTED_HEADER_CONTENT);
+}
+
+static bool text_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
+  const bool subsection = s->mode == SUBSECTION;
+  const bool quoted = s->mode != VALUE;
+  const int32_t c = lexer->lookahead;
+  if (!quoted && (at_end(s) || comment(c))) {
+    s->mode = VARIABLE_TAIL;
+    return emit(lexer, valid, VALUE_END);
+  }
+  if (at_end(s)) {
+    s->mode = subsection ? HEADER_CLOSE : VALUE;
+    return emit(
+      lexer,
+      valid,
+      absent(lexer, MISSING_QUOTE_CLOSE, INCOMPLETE_QUOTE_CLOSE)
+    );
+  }
+  if (!quoted && !s->value_started && space(c)) {
+    const uint32_t start = s->position;
+    skip_spaces(s, lexer);
+    if (!at_end(s) && !comment(lexer->lookahead)) {
+      lexer->mark_end(lexer);
+      return emit(lexer, valid, LAYOUT);
+    }
+    s->position = start;
+    s->mode = VARIABLE_TAIL;
+    return emit(lexer, valid, VALUE_END);
+  }
+  if (c == '"') {
+    s->mode = quoted ? (subsection ? HEADER_CLOSE : VALUE) : QUOTED_VALUE;
+    return take(s, lexer, valid, quoted ? QUOTE_CLOSE : QUOTE_OPEN);
+  }
+  if (c == -1) {
+    if (!subsection) s->value_started = true;
+    return invalid_run(s, lexer, valid);
+  }
+  if (subsection && c == 0)
+    return take(s, lexer, valid, INVALID_SUBSECTION_CHARACTER);
+  if (c == '\\') return escape(s, lexer, valid, subsection);
+  const uint32_t start = s->position;
+  uint32_t end = start;
+  while (!at_end(s) && !text_end(subsection, quoted, lexer->lookahead)) {
+    const bool content = quoted || !space(lexer->lookahead);
+    advance(s, lexer);
+    if (content) {
+      lexer->mark_end(lexer);
+      end = s->position;
+    }
+  }
+  if (!quoted && !at_end(s) && !comment(lexer->lookahead)) {
+    lexer->mark_end(lexer);
+    end = s->position;
+  }
+  s->position = end;
+  if (end == start) {
+    s->mode = VARIABLE_TAIL;
+    return emit(lexer, valid, VALUE_END);
+  }
+  if (!subsection) s->value_started = true;
+  return emit(lexer, valid, subsection ? SUBSECTION_TEXT : VALUE_TEXT);
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
-  if (valid[ERROR_SENTINEL])
-    return false;
+  if (valid[ERROR_SENTINEL]) return false;
   if (!s->ready) {
-    if (!lexer->eof(lexer))
-      return line_start(s, lexer, valid);
+    if (!lexer->eof(lexer)) return start_line(s, lexer, valid);
     s->position = s->content_end = s->line_end = 0;
     s->ready = true;
   }
   lexer->mark_end(lexer);
   for (;;) {
-    int32_t c = lexer->lookahead;
+    const int32_t c = lexer->lookahead;
     switch ((enum Mode)s->mode) {
-    case START: {
-      if (lexer->eof(lexer))
-        return false;
-      while (!at_end(s) && space(lexer->lookahead))
-        advance(s, lexer);
-      lexer->mark_end(lexer);
-      if (at_end(s)) {
-        s->mode = BLANK;
-        return emit(lexer, valid, BLANK_START);
-      }
-      if (lexer->lookahead == '[') {
-        s->mode = HEADER_OPEN;
-        return emit(lexer, valid, SECTION_START);
-      }
-      if (comment(lexer->lookahead))
-        return start_comment(s, lexer, valid);
-      s->mode = VARIABLE_HEADER;
-      return emit(lexer, valid, VARIABLE_START);
-    }
-    case HEADER_OPEN:
-      s->subsection_at = UINT32_MAX;
-      s->mode = HEADER_NAME;
-      return take(s, lexer, valid, SECTION_OPEN);
-    case HEADER_NAME:
-    case VARIABLE_NAME: {
-      const bool header = s->mode == HEADER_NAME;
-      if (header && !at_end(s) && space(c))
-        return header_space(s, lexer, valid);
-      s->first = true;
-      s->separated = false;
-      if (name_boundary(s, c)) {
-        s->mode = header ? HEADER_AFTER_NAME : VARIABLE_AFTER_NAME;
-        return emit(
-          lexer,
-          valid,
-          header ? absent(lexer, MISSING_SECTION_NAME, INCOMPLETE_SECTION_NAME)
-                 : MISSING_VARIABLE_NAME
-        );
-      }
-      if (header)
-        s->subsection_at = legacy_separator(s, lexer);
-      s->mode = header ? HEADER_NAME_TEXT : VARIABLE_NAME_TEXT;
-      return emit(lexer, valid, NAME_START);
-    }
-    case HEADER_NAME_TEXT:
-    case VARIABLE_NAME_TEXT:
-    case LEGACY_SUBSECTION: {
-      const bool legacy = s->mode == LEGACY_SUBSECTION;
-      if (name_boundary(s, c)) {
-        s->mode = legacy                ? HEADER_CLOSE
-          : s->mode == HEADER_NAME_TEXT ? HEADER_AFTER_NAME
-                                        : VARIABLE_AFTER_NAME;
-        return emit(lexer, valid, legacy ? SUBSECTION_END : NAME_END);
-      }
-      if (c == -1) {
-        s->first = false;
-        return take(s, lexer, valid, INVALID_ENCODING);
-      }
-      if (trailing_cr(s, c)) {
-        s->first = false;
-        return take(s, lexer, valid, INCOMPLETE_NAME_CHARACTER);
-      }
-      const bool valid_name = name_character(s, c);
-      do {
-        advance(s, lexer);
-        s->first = false;
-      } while (
-        !name_boundary(s, lexer->lookahead) &&
-        lexer->lookahead !=
-        -1 &&
-        name_character(s, lexer->lookahead) ==
-        valid_name &&
-        !trailing_cr(s, lexer->lookahead)
-      );
-      lexer->mark_end(lexer);
-      return emit(
-        lexer,
-        valid,
-        valid_name ? (legacy ? SUBSECTION_TEXT : NAME_TEXT)
-                   : INVALID_NAME_CHARACTER
-      );
-    }
-    case HEADER_AFTER_NAME:
-      if (s->position == s->subsection_at) {
-        s->mode = LEGACY_SUBSECTION;
-        return take(s, lexer, valid, SUBSECTION_SEPARATOR);
-      }
-      if (!at_end(s) && space(c))
-        return header_space(s, lexer, valid);
-      if (!at_end(s) && c == '"') {
-        s->mode = SUBSECTION_OPEN;
-        if (!s->first && !s->separated)
-          return emit(lexer, valid, MISSING_SUBSECTION_SEPARATOR);
+      case START:
+        return start_content(s, lexer, valid);
+      case HEADER_OPEN:
+        s->subsection_at = NONE;
+        s->mode = HEADER_NAME;
+        return take(s, lexer, valid, SECTION_OPEN);
+      case HEADER_NAME:
+      case VARIABLE_NAME:
+        return name_start(s, lexer, valid);
+      case HEADER_NAME_TEXT:
+      case VARIABLE_NAME_TEXT:
+      case LEGACY_SUBSECTION:
+        return name_piece(s, lexer, valid);
+      case HEADER_AFTER_NAME:
+        if (s->position == s->subsection_at) {
+          s->mode = LEGACY_SUBSECTION;
+          return take(s, lexer, valid, SUBSECTION_SEPARATOR);
+        }
+        if (!at_end(s) && space(c)) return header_space(s, lexer, valid);
+        if (!at_end(s) && c == '"') {
+          s->mode = SUBSECTION_OPEN;
+          if (!s->first && !s->separated)
+            return emit(lexer, valid, MISSING_SUBSECTION_SEPARATOR);
+          continue;
+        }
+        s->mode = HEADER_CLOSE;
         continue;
-      }
-      s->mode = HEADER_CLOSE;
-      continue;
-    case SUBSECTION_OPEN:
-      s->mode = SUBSECTION;
-      return take(s, lexer, valid, QUOTE_OPEN);
-    case HEADER_CLOSE:
-      if (s->subsection_at != UINT32_MAX && !at_end(s) && space(c))
-        return header_space(s, lexer, valid);
-      s->mode = HEADER_TAIL;
-      return emit(lexer, valid, HEADER_TAIL_START);
-    case HEADER_TAIL:
-      if (at_end(s) || comment(c)) {
-        s->mode = AFTER_HEADER;
+      case SUBSECTION_OPEN:
+        s->mode = SUBSECTION;
+        return take(s, lexer, valid, QUOTE_OPEN);
+      case HEADER_CLOSE:
+        if (s->subsection_at != NONE && !at_end(s) && space(c))
+          return header_space(s, lexer, valid);
+        s->mode = HEADER_TAIL;
+        return emit(lexer, valid, HEADER_TAIL_START);
+      case HEADER_TAIL:
+        return header_tail(s, lexer, valid);
+      case AFTER_HEADER:
+        if (!at_end(s) && space(c)) {
+          skip_spaces(s, lexer);
+          lexer->mark_end(lexer);
+          if (at_end(s) || comment(lexer->lookahead))
+            return emit(lexer, valid, LAYOUT);
+        }
+        if (at_end(s)) {
+          s->mode = START;
+          return end_line(s, lexer, valid);
+        }
+        if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
+        s->mode = VARIABLE_HEADER;
+        return emit(lexer, valid, VARIABLE_START);
+      case VARIABLE_HEADER:
+        s->mode = VARIABLE_NAME;
+        if (valid[MISSING_SECTION_HEADER])
+          return emit(
+            lexer,
+            valid,
+            trailing_cr(s, c) ? INCOMPLETE_SECTION_HEADER
+                              : MISSING_SECTION_HEADER
+          );
+        continue;
+      case VARIABLE_AFTER_NAME:
+        if (!at_end(s) && space(c)) return layout(s, lexer, valid);
+        if (at_end(s) || comment(c)) {
+          s->mode = VARIABLE_TAIL;
+          continue;
+        }
+        s->mode = VALUE_BEFORE;
+        if (c == '=') return take(s, lexer, valid, ASSIGNMENT_OPERATOR);
         return emit(
           lexer,
           valid,
-          absent(lexer, MISSING_SECTION_CLOSE, INCOMPLETE_SECTION_CLOSE)
+          trailing_cr(s, c) ? INCOMPLETE_ASSIGNMENT_OPERATOR
+                            : MISSING_ASSIGNMENT_OPERATOR
         );
-      }
-      if (c == ']') {
-        s->mode = AFTER_HEADER;
-        return take(s, lexer, valid, SECTION_CLOSE);
-      }
-      if (c == -1)
-        return take(s, lexer, valid, INVALID_ENCODING);
-      if (trailing_cr(s, c))
-        return take(s, lexer, valid, INCOMPLETE_HEADER_CONTENT);
-      do
-        advance(s, lexer);
-      while (header_junk(s, lexer->lookahead));
-      lexer->mark_end(lexer);
-      return emit(lexer, valid, UNEXPECTED_HEADER_CONTENT);
-    case AFTER_HEADER:
-      if (!at_end(s) && space(c)) {
-        while (!at_end(s) && space(lexer->lookahead))
-          advance(s, lexer);
-        lexer->mark_end(lexer);
-        if (at_end(s) || comment(lexer->lookahead))
-          return emit(lexer, valid, LAYOUT);
-      }
-      if (at_end(s)) {
+      case VALUE_BEFORE:
+        if (!at_end(s) && space(c)) return layout(s, lexer, valid);
+        if (at_end(s) || comment(c)) {
+          s->mode = VARIABLE_TAIL;
+          continue;
+        }
+        s->mode = VALUE;
+        s->value_started = false;
+        return emit(lexer, valid, VALUE_START);
+      case SUBSECTION:
+      case VALUE:
+      case QUOTED_VALUE:
+        return text_piece(s, lexer, valid);
+      case VARIABLE_TAIL:
+        if (!at_end(s) && space(c)) return layout(s, lexer, valid);
+        if (!at_end(s) && comment(c)) return start_comment(s, lexer, valid);
         s->mode = START;
         return end_line(s, lexer, valid);
-      }
-      if (comment(lexer->lookahead))
-        return start_comment(s, lexer, valid);
-      s->mode = VARIABLE_HEADER;
-      return emit(lexer, valid, VARIABLE_START);
-    case VARIABLE_HEADER:
-      s->mode = VARIABLE_NAME;
-      if (valid[MISSING_SECTION_HEADER])
-        return emit(
-          lexer,
-          valid,
-          trailing_cr(s, c) ? INCOMPLETE_SECTION_HEADER : MISSING_SECTION_HEADER
-        );
-      continue;
-    case VARIABLE_AFTER_NAME:
-      if (!at_end(s) && space(c))
-        return layout(s, lexer, valid);
-      if (at_end(s) || comment(c)) {
-        s->mode = VARIABLE_TAIL;
-        continue;
-      }
-      s->mode = VALUE_BEFORE;
-      if (c == '=')
-        return take(s, lexer, valid, ASSIGNMENT_OPERATOR);
-      return emit(
-        lexer,
-        valid,
-        trailing_cr(s, c) ? INCOMPLETE_ASSIGNMENT_OPERATOR
-                          : MISSING_ASSIGNMENT_OPERATOR
-      );
-    case VALUE_BEFORE:
-      if (!at_end(s) && space(c))
-        return layout(s, lexer, valid);
-      if (at_end(s) || comment(c)) {
-        s->mode = VARIABLE_TAIL;
-        continue;
-      }
-      s->mode = VALUE;
-      s->value_started = false;
-      return emit(lexer, valid, VALUE_START);
-    case SUBSECTION:
-    case VALUE:
-    case QUOTED_VALUE: {
-      const bool subsection = s->mode == SUBSECTION;
-      const bool quoted = s->mode != VALUE;
-      if (!quoted && (at_end(s) || comment(c))) {
-        s->mode = VARIABLE_TAIL;
-        return emit(lexer, valid, VALUE_END);
-      }
-      if (at_end(s)) {
-        s->mode = subsection ? HEADER_CLOSE : VALUE;
-        return emit(
-          lexer,
-          valid,
-          absent(lexer, MISSING_QUOTE_CLOSE, INCOMPLETE_QUOTE_CLOSE)
-        );
-      }
-      if (!quoted && !s->value_started && space(c)) {
-        const uint32_t start = s->position;
-        while (!at_end(s) && space(lexer->lookahead))
-          advance(s, lexer);
-        if (!at_end(s) && !comment(lexer->lookahead)) {
-          lexer->mark_end(lexer);
-          return emit(lexer, valid, LAYOUT);
+      case COMMENT_MARK:
+        s->mode = COMMENT;
+        return take(s, lexer, valid, COMMENT_MARKER);
+      case COMMENT:
+        if (at_end(s)) {
+          s->mode = COMMENT_ENDING;
+          if (s->comment_return == START && !lexer->eof(lexer))
+            return end_line(s, lexer, valid);
+          continue;
         }
-        s->position = start;
-        s->mode = VARIABLE_TAIL;
-        return emit(lexer, valid, VALUE_END);
-      }
-      if (c == '"') {
-        s->mode = quoted ? (subsection ? HEADER_CLOSE : VALUE) : QUOTED_VALUE;
-        return take(s, lexer, valid, quoted ? QUOTE_CLOSE : QUOTE_OPEN);
-      }
-      if (c == -1 || (subsection && c == 0)) {
-        if (!subsection)
-          s->value_started = true;
-        return take(
-          s,
-          lexer,
-          valid,
-          c == -1 ? INVALID_ENCODING : INVALID_SUBSECTION_CHARACTER
-        );
-      }
-      if (c == '\\')
-        return escape(s, lexer, valid, subsection);
-      const uint32_t start = s->position;
-      uint32_t end = start;
-      while (!at_end(s) && !text_end(subsection, quoted, lexer->lookahead)) {
-        c = lexer->lookahead;
-        advance(s, lexer);
-        if (quoted || !space(c)) {
-          lexer->mark_end(lexer);
-          end = s->position;
-        }
-      }
-      if (!quoted && !at_end(s) && !comment(lexer->lookahead)) {
+        if (c == -1) return invalid_run(s, lexer, valid);
+        while (!at_end(s) && lexer->lookahead != -1) advance(s, lexer);
         lexer->mark_end(lexer);
-        end = s->position;
-      }
-      s->position = end;
-      if (end == start) {
-        s->mode = VARIABLE_TAIL;
-        return emit(lexer, valid, VALUE_END);
-      }
-      if (!subsection)
-        s->value_started = true;
-      return emit(lexer, valid, subsection ? SUBSECTION_TEXT : VALUE_TEXT);
-    }
-    case VARIABLE_TAIL:
-      if (!at_end(s) && space(c))
-        return layout(s, lexer, valid);
-      if (!at_end(s) && comment(c))
-        return start_comment(s, lexer, valid);
-      s->mode = START;
-      return end_line(s, lexer, valid);
-    case COMMENT_MARK:
-      s->mode = COMMENT;
-      return take(s, lexer, valid, COMMENT_MARKER);
-    case COMMENT:
-      if (at_end(s)) {
-        s->mode = COMMENT_ENDING;
-        if (s->comment_return == START && !lexer->eof(lexer))
-          return end_line(s, lexer, valid);
-        continue;
-      }
-      if (c == -1)
-        return take(s, lexer, valid, INVALID_ENCODING);
-      while (!at_end(s) && lexer->lookahead != -1)
-        advance(s, lexer);
-      lexer->mark_end(lexer);
-      return emit(lexer, valid, COMMENT_TEXT);
-    case COMMENT_ENDING:
-      s->mode = s->comment_return;
-      return emit(lexer, valid, COMMENT_END);
-    case BLANK:
-      s->mode = START;
-      return end_line(s, lexer, valid);
+        return emit(lexer, valid, COMMENT_TEXT);
+      case COMMENT_ENDING:
+        s->mode = s->comment_return;
+        return emit(lexer, valid, COMMENT_END);
+      case BLANK:
+        s->mode = START;
+        return end_line(s, lexer, valid);
     }
     return false;
   }
@@ -611,8 +598,7 @@ void tree_sitter_gitconfig_external_scanner_deserialize(
   unsigned length
 ) {
   memset(payload, 0, sizeof(Scanner));
-  if (length == sizeof(Scanner))
-    memcpy(payload, buffer, length);
+  if (length == sizeof(Scanner)) memcpy(payload, buffer, length);
 }
 
 bool tree_sitter_gitconfig_external_scanner_scan(
@@ -621,8 +607,7 @@ bool tree_sitter_gitconfig_external_scanner_scan(
   const bool *valid
 ) {
   Scanner next = *(Scanner *)payload;
-  if (!scan(&next, lexer, valid))
-    return false;
+  if (!scan(&next, lexer, valid)) return false;
   *(Scanner *)payload = next;
   return true;
 }

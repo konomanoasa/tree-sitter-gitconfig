@@ -1,3 +1,7 @@
+const missingKinds = (name) => [
+  [`missing_${name}`, "invalid_syntax", `missing_${name}`],
+  [`incomplete_${name}`, "incomplete_syntax", `missing_${name}`],
+];
 const issueKinds = [
   ["invalid_encoding", "invalid_syntax", "invalid_encoding"],
   ["invalid_name_character", "invalid_syntax", "invalid_name_character"],
@@ -10,10 +14,7 @@ const issueKinds = [
   ["invalid_escape", "invalid_syntax", "invalid_escape"],
   ["ended_escape", "invalid_syntax", "incomplete_escape"],
   ["incomplete_escape", "incomplete_syntax", "incomplete_escape"],
-  ...["section_name", "section_close", "quote_close"].flatMap((name) => [
-    [`missing_${name}`, "invalid_syntax", `missing_${name}`],
-    [`incomplete_${name}`, "incomplete_syntax", `missing_${name}`],
-  ]),
+  ...["section_name", "section_close", "quote_close"].flatMap(missingKinds),
   ["missing_variable_name", "invalid_syntax", "missing_variable_name"],
   [
     "missing_subsection_separator",
@@ -26,18 +27,8 @@ const issueKinds = [
     "incomplete_syntax",
     "unexpected_header_content",
   ],
-  [
-    "missing_assignment_operator",
-    "invalid_syntax",
-    "missing_assignment_operator",
-  ],
-  [
-    "incomplete_assignment_operator",
-    "incomplete_syntax",
-    "missing_assignment_operator",
-  ],
-  ["missing_section_header", "invalid_syntax", "missing_section_header"],
-  ["incomplete_section_header", "incomplete_syntax", "missing_section_header"],
+  ...missingKinds("assignment_operator"),
+  ...missingKinds("section_header"),
 ];
 const issueRules = Object.fromEntries(
   issueKinds.flatMap(([token, outcome, reason]) => [
@@ -47,22 +38,24 @@ const issueRules = Object.fromEntries(
 );
 const issue = ($, name) =>
   field("issue", alias($[`_${name}_issue`], $.syntax_issue));
+const issues = ($, ...names) => names.map((name) => issue($, name));
 const missing = ($, name) =>
   choice(issue($, `missing_${name}`), issue($, `incomplete_${name}`));
 const nameContent = ($, text) =>
   choice(
     text,
-    issue($, "invalid_name_character"),
-    issue($, "incomplete_name_character"),
-    issue($, "invalid_encoding"),
+    ...issues(
+      $,
+      "invalid_name_character",
+      "incomplete_name_character",
+      "invalid_encoding",
+    ),
   );
 const valuePieces = ($) => [
   $.value_text,
   $.escape,
   $.line_continuation,
-  issue($, "invalid_encoding"),
-  issue($, "invalid_escape"),
-  issue($, "incomplete_escape"),
+  ...issues($, "invalid_encoding", "invalid_escape", "incomplete_escape"),
   $._escape_prefix,
 ];
 
@@ -136,9 +129,12 @@ export default grammar({
         $._header_tail_start,
         repeat(
           choice(
-            issue($, "unexpected_header_content"),
-            issue($, "incomplete_header_content"),
-            issue($, "invalid_encoding"),
+            ...issues(
+              $,
+              "unexpected_header_content",
+              "incomplete_header_content",
+              "invalid_encoding",
+            ),
           ),
         ),
         choice(field("closing", $.section_close), missing($, "section_close")),
@@ -163,10 +159,13 @@ export default grammar({
           choice(
             $.subsection_text,
             $.escape,
-            issue($, "invalid_encoding"),
-            issue($, "invalid_subsection_character"),
-            issue($, "ended_escape"),
-            issue($, "incomplete_escape"),
+            ...issues(
+              $,
+              "invalid_encoding",
+              "invalid_subsection_character",
+              "ended_escape",
+              "incomplete_escape",
+            ),
             $._escape_prefix,
           ),
         ),
