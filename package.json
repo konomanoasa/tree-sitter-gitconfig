@@ -1,6 +1,6 @@
 {
   "name": "@konomanoasa/tree-sitter-gitconfig",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Tree-sitter grammar for gitconfig.",
   "license": "MIT",

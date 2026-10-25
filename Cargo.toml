@@ -1,6 +1,6 @@
 [package]
 name = "konomanoasa-tree-sitter-gitconfig"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 description = "Tree-sitter grammar for gitconfig."
 readme = "README.md"
