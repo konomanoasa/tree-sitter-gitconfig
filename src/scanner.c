@@ -85,7 +85,7 @@ enum Mode {
 
 #define NONE UINT32_MAX
 
-// Positions are line-relative; 24 bytes fit Tree-sitter's inline state.
+// Positions are line-relative character offsets.
 typedef struct {
   uint32_t position, content_end, line_end, subsection_at;
   uint16_t mode, comment_return;
@@ -187,10 +187,7 @@ static bool invalid_run(Scanner *s, TSLexer *lexer, const bool *valid) {
 
 static bool
 take(Scanner *s, TSLexer *lexer, const bool *valid, enum Token token) {
-  do advance(s, lexer);
-  while (
-    token == INVALID_SUBSECTION_CHARACTER && !at_end(s) && lexer->lookahead == 0
-  );
+  advance(s, lexer);
   lexer->mark_end(lexer);
   return emit(lexer, valid, token);
 }
@@ -339,19 +336,13 @@ static bool name_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
                                     : VARIABLE_AFTER_NAME;
     return emit(lexer, valid, legacy ? SUBSECTION_END : NAME_END);
   }
-  if (c == -1) {
-    s->first = false;
-    return invalid_run(s, lexer, valid);
-  }
-  if (trailing_cr(s, c)) {
-    s->first = false;
-    return take(s, lexer, valid, INCOMPLETE_NAME_CHARACTER);
-  }
   const bool valid_name = name_character(s, c);
-  do {
-    advance(s, lexer);
-    s->first = false;
-  } while (
+  s->first = false;
+  if (c == -1) return invalid_run(s, lexer, valid);
+  if (trailing_cr(s, c))
+    return take(s, lexer, valid, INCOMPLETE_NAME_CHARACTER);
+  do advance(s, lexer);
+  while (
     !name_boundary(s, lexer->lookahead) &&
     lexer->lookahead != -1 &&
     name_character(s, lexer->lookahead) == valid_name &&
@@ -423,8 +414,12 @@ static bool text_piece(Scanner *s, TSLexer *lexer, const bool *valid) {
     if (!subsection) s->value_started = true;
     return invalid_run(s, lexer, valid);
   }
-  if (subsection && c == 0)
-    return take(s, lexer, valid, INVALID_SUBSECTION_CHARACTER);
+  if (subsection && c == 0) {
+    do advance(s, lexer);
+    while (!at_end(s) && lexer->lookahead == 0);
+    lexer->mark_end(lexer);
+    return emit(lexer, valid, INVALID_SUBSECTION_CHARACTER);
+  }
   if (c == '\\') return escape(s, lexer, valid, subsection);
   const uint32_t start = s->position;
   uint32_t end = start;

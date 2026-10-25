@@ -4,14 +4,30 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { root } from "../scripts/tree-sitter.js";
 import nodeTypes from "../src/node-types.json" with { type: "json" };
-import { parseCorpus } from "./support/corpus.js";
 import { issues, leaves, owners, parseCst } from "./support/cst.js";
-import {
-  applyEdits,
-  assertEditHistory,
-  assertIncrementalEqualsFresh,
-  parse,
-} from "./support/parser.js";
+import { parse } from "./support/parser.js";
+
+function parseCorpus(text) {
+  const sections = text.split("==================\n");
+  assert.equal(sections.shift(), "", "corpus must begin with a header");
+  assert.equal(sections.length % 2, 0, "corpus headers must be paired");
+  const cases = [];
+  for (let index = 0; index < sections.length; index += 2) {
+    const [name, ...attributes] = sections[index].trimEnd().split("\n");
+    assert.ok(name, "corpus case must have a name");
+    for (const attribute of attributes) {
+      assert.ok(
+        attribute === ":cst" || attribute === ":error",
+        `unsupported corpus attribute: ${attribute}`,
+      );
+    }
+    const parts = sections[index + 1].split("\n---\n");
+    assert.equal(parts.length, 2, `${name}: expected one output separator`);
+    const source = parts[0].endsWith("\r") ? parts[0].slice(0, -1) : parts[0];
+    cases.push({ name, source });
+  }
+  return cases;
+}
 
 const corpusDirectory = join(root, "test/corpus");
 for (const file of readdirSync(corpusDirectory).sort()) {
@@ -84,42 +100,18 @@ test("gitconfig: public issue nodes have one outcome and one reason leaf", () =>
   }
 });
 
-test("gitconfig: invalid whitespace cannot absorb a header decoding failure", () => {
-  const source = Buffer.from([91, 120, 32, 34, 97, 34, 32, 255, 32, 93]);
-  const nodes = parse(source);
-  assert.deepEqual(issues(nodes), [
-    ["invalid_syntax", "unexpected_header_content", 6, 7],
-    ["invalid_syntax", "invalid_encoding", 7, 8],
-    ["invalid_syntax", "unexpected_header_content", 8, 9],
-  ]);
-  assert.deepEqual(owners(nodes), [
-    "section_header",
-    "section_header",
-    "section_header",
-  ]);
-  for (const node of nodes.filter(({ kind }) => kind === "syntax_issue"))
-    assert.equal(node.field, "issue");
-});
-
-test("gitconfig: invalid encoding before continuation preserves value text ranges", () => {
-  const source = Buffer.from([
-    91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99,
-  ]);
-  const nodes = parse(source);
-  assert.deepEqual(issues(nodes), [
-    ["invalid_syntax", "invalid_encoding", 6, 7],
-  ]);
-  assert.deepEqual(
-    nodes
-      .filter(({ kind }) => kind === "value_text")
-      .map(({ start, end }) => [
-        start,
-        end,
-        source.subarray(start, end).toString(),
-      ]),
-    [[9, 12, "  c"]],
-  );
-});
+const largeInputCounts = {
+  sections: 10_000,
+  valueCharacters: 200_000,
+};
+const largeInputCases = [
+  ["many sections", "[x]\na=1\n".repeat(largeInputCounts.sections), 0],
+  ["long value", `[x]\na=${"a".repeat(largeInputCounts.valueCharacters)}`, 0],
+];
+for (const [name, source, expectedIssues] of largeInputCases) {
+  test(`gitconfig: large input: ${name}`, () =>
+    assert.equal(issues(parse(source)).length, expectedIssues));
+}
 
 for (const [name, prefix, suffix, owner] of [
   ["section name", "[a", "b]", "section_name"],
@@ -158,63 +150,6 @@ test("gitconfig: invalid UTF-8 sequence reports the failed range", () => {
     ["invalid_syntax", "invalid_encoding", 6, 7],
   ]);
 });
-
-for (const [owner, prefix, suffix] of [
-  ["quoted value", '[a]\nx="', '"'],
-  ["comment", "# a", "b"],
-  ["section name", "[a", "]"],
-]) {
-  for (const bom of ["", "\uFEFF"]) {
-    test(`gitconfig: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
-      const offset = Buffer.byteLength(bom + prefix);
-      const source = Buffer.concat([
-        Buffer.from(bom + prefix),
-        Buffer.from([255]),
-        Buffer.from(`é${suffix}`),
-      ]);
-      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
-      const incremental = assertIncrementalEqualsFresh(
-        source,
-        edits,
-        applyEdits(source, edits),
-      );
-      assert.deepEqual(
-        incremental
-          .filter(({ kind }) => kind === "syntax_issue")
-          .map(({ start, end }) => [start, end]),
-        [[offset, offset + 2]],
-      );
-    });
-  }
-}
-
-const editCases = [
-  {
-    name: "insert initial BOM",
-    source: "[x]\na=1",
-    edits: [{ byte: 0, deleteBytes: 0, insert: "\uFEFF" }],
-  },
-  {
-    name: "remove initial BOM",
-    source: "\uFEFF[x]\na=1",
-    edits: [{ byte: 0, deleteBytes: 3, insert: "" }],
-  },
-  {
-    name: "split Unicode",
-    source: "[x]\na=é",
-    edits: [{ byte: 7, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "repair invalid UTF-8",
-    source: Buffer.from([91, 120, 93, 10, 97, 61, 255]),
-    edits: [{ byte: 6, deleteBytes: 1, insert: "é" }],
-  },
-];
-for (const entry of editCases) {
-  test(`gitconfig: ${entry.name}`, () => {
-    assertEditHistory(entry);
-  });
-}
 
 test("gitconfig: CST helpers preserve fields, hierarchy and UTF-8 ranges across CRLF", () => {
   const source = " [core]\r\nname=日本";

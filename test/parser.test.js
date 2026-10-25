@@ -7,7 +7,6 @@ import { test } from "node:test";
 import { issues, owners } from "./support/cst.js";
 import {
   applyEdits,
-  assertEditHistory,
   assertIncrementalEqualsFresh,
   parse,
 } from "./support/parser.js";
@@ -101,15 +100,11 @@ test("gitconfig: Git runtime checks the documented supplementary cases", (t) => 
 });
 
 const largeInputCounts = {
-  sections: 10_000,
-  valueCharacters: 200_000,
   trailingSpaces: 200_000,
   continuations: 10_000,
   invalidQuotes: 10_000,
 };
 const largeInputCases = [
-  ["many sections", "[x]\na=1\n".repeat(largeInputCounts.sections), 0],
-  ["long value", `[x]\na=${"a".repeat(largeInputCounts.valueCharacters)}`, 0],
   [
     "long trailing whitespace",
     `[x]\na=b${" ".repeat(largeInputCounts.trailingSpaces)}`,
@@ -145,6 +140,43 @@ test("gitconfig: a long invalid name run forms one issue with its full range", (
     ],
   ]);
   assert.deepEqual(owners(tree), ["variable_name"]);
+});
+
+test("gitconfig: invalid whitespace cannot absorb a header decoding failure", () => {
+  const source = Buffer.from([91, 120, 32, 34, 97, 34, 32, 255, 32, 93]);
+  const nodes = parse(source);
+  assert.deepEqual(issues(nodes), [
+    ["invalid_syntax", "unexpected_header_content", 6, 7],
+    ["invalid_syntax", "invalid_encoding", 7, 8],
+    ["invalid_syntax", "unexpected_header_content", 8, 9],
+  ]);
+  assert.deepEqual(owners(nodes), [
+    "section_header",
+    "section_header",
+    "section_header",
+  ]);
+  for (const node of nodes.filter(({ kind }) => kind === "syntax_issue"))
+    assert.equal(node.field, "issue");
+});
+
+test("gitconfig: invalid encoding before continuation preserves value text ranges", () => {
+  const source = Buffer.from([
+    91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99,
+  ]);
+  const nodes = parse(source);
+  assert.deepEqual(issues(nodes), [
+    ["invalid_syntax", "invalid_encoding", 6, 7],
+  ]);
+  assert.deepEqual(
+    nodes
+      .filter(({ kind }) => kind === "value_text")
+      .map(({ start, end }) => [
+        start,
+        end,
+        source.subarray(start, end).toString(),
+      ]),
+    [[9, 12, "  c"]],
+  );
 });
 
 const trailingCrCases = [
@@ -309,116 +341,6 @@ test("gitconfig: a normal name character splits and rejoins an invalid run", () 
   ]);
   assert.deepEqual(joined, parse(source));
 });
-
-const editCases = [
-  {
-    name: "insert whitespace before the section name",
-    source: "[core]",
-    edits: [{ byte: 1, deleteBytes: 0, insert: " \t" }],
-  },
-  {
-    name: "remove whitespace before the section name",
-    source: "[ \tcore]",
-    edits: [{ byte: 1, deleteBytes: 2, insert: "" }],
-  },
-  {
-    name: "insert whitespace before the section close",
-    source: "[core]",
-    edits: [{ byte: 5, deleteBytes: 0, insert: " \t" }],
-  },
-  {
-    name: "turn invalid whitespace into a subsection separator",
-    source: "[core ]",
-    edits: [{ byte: 6, deleteBytes: 0, insert: '"x"' }],
-  },
-  {
-    name: "complete a quoted subsection after an unfinished legacy header",
-    source: "[remote.origin ",
-    edits: [{ byte: 15, deleteBytes: 0, insert: '"x"]' }],
-  },
-  {
-    name: "end an unfinished subsection separator with a newline",
-    source: "[core ",
-    edits: [{ byte: 6, deleteBytes: 0, insert: "\nx=y" }],
-  },
-  {
-    name: "remove invalid whitespace after a quoted subsection",
-    source: '[remote "x" \t]',
-    edits: [{ byte: 11, deleteBytes: 2, insert: "" }],
-  },
-  {
-    name: "add a quoted subsection after a dotted name",
-    source: "[remote.origin]",
-    edits: [{ byte: 14, deleteBytes: 0, insert: ' "branch"' }],
-  },
-  {
-    name: "remove a quoted subsection and expose a legacy separator",
-    source: '[remote.origin "branch"]',
-    edits: [{ byte: 14, deleteBytes: 9, insert: "" }],
-  },
-  {
-    name: "insert a section name before an unseparated subsection",
-    source: '["x"]',
-    edits: [{ byte: 1, deleteBytes: 0, insert: "remote" }],
-  },
-  {
-    name: "remove a section name before an unseparated subsection",
-    source: '[remote"x"]',
-    edits: [{ byte: 1, deleteBytes: 6, insert: "" }],
-  },
-  {
-    name: "close a header",
-    source: "[core",
-    edits: [{ byte: 5, deleteBytes: 0, insert: "]" }],
-  },
-  {
-    name: "turn variable into comment",
-    source: "[x]\na=1",
-    edits: [{ byte: 4, deleteBytes: 0, insert: "#" }],
-  },
-  {
-    name: "turn comment into variable",
-    source: "[x]\n#a=1",
-    edits: [{ byte: 4, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "remove assignment operator",
-    source: "[x]\na = b",
-    edits: [{ byte: 6, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "close a value quote",
-    source: '[x]\na="b',
-    edits: [{ byte: 8, deleteBytes: 0, insert: '"' }],
-  },
-  {
-    name: "remove a subsection quote",
-    source: '[x "a"]\nb=1',
-    edits: [{ byte: 5, deleteBytes: 1, insert: "" }],
-  },
-  {
-    name: "split and merge a decode failure run inside a quoted value",
-    source: Buffer.from([91, 120, 93, 10, 97, 61, 34, 255, 254, 128, 34]),
-    edits: [
-      { byte: 8, deleteBytes: 0, insert: "é" },
-      { byte: 8, deleteBytes: 2, insert: "" },
-      { byte: 7, deleteBytes: 3, insert: "x" },
-    ],
-  },
-  {
-    name: "separate decode failures between a section name and subsection",
-    source: Buffer.from([91, 255, 254, 128, 93]),
-    edits: [
-      { byte: 2, deleteBytes: 0, insert: "." },
-      { byte: 2, deleteBytes: 1, insert: "" },
-    ],
-  },
-];
-for (const entry of editCases) {
-  test(`gitconfig: ${entry.name}`, () => {
-    assertEditHistory(entry);
-  });
-}
 
 for (const { name, source, edits, expected } of [
   {

@@ -23,6 +23,30 @@ bare
 1:4 - 1:5           `\n`
 
 ==================
+CRLF terminates a bare variable without a value
+:cst
+==================
+[a]
+x 
+
+---
+
+0:0 - 2:0   document
+0:0 - 2:0     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `a`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:0       line_ending
+0:3 - 0:4         `\n`
+1:0 - 2:0       variable
+1:0 - 1:1         name: variable_name
+1:0 - 1:1           name_text `x`
+1:2 - 2:0         line_ending
+1:2 - 1:4           `\r\n`
+
+==================
 Contiguous forbidden variable name characters form one issue
 :cst
 ==================
@@ -180,6 +204,31 @@ Missing assignment
 0:6 - 0:7           value_text `b`
 
 ==================
+CR before another name character is invalid
+:cst
+==================
+[a]
+xx
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `a`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:0       line_ending
+0:3 - 0:4         `\n`
+1:0 - 1:3       variable
+1:0 - 1:3         name: variable_name
+1:0 - 1:1           name_text `x`
+1:1 - 1:2           issue: syntax_issue
+1:1 - 1:2             invalid_syntax
+1:1 - 1:2               invalid_name_character `\r`
+1:2 - 1:3           name_text `x`
+
+==================
 CR-only value retains a missing assignment at EOF
 :cst
 ==================
@@ -204,30 +253,6 @@ x
 1:2 - 1:2             missing_assignment_operator
 1:2 - 1:3         value: value
 1:2 - 1:3           value_text `\r`
-
-==================
-CRLF terminates a bare variable without a value
-:cst
-==================
-[a]
-x 
-
----
-
-0:0 - 2:0   document
-0:0 - 2:0     section
-0:0 - 0:3       header: section_header
-0:0 - 0:1         opening: section_open `[`
-0:1 - 0:2         name: section_name
-0:1 - 0:2           name_text `a`
-0:2 - 0:3         closing: section_close `]`
-0:3 - 1:0       line_ending
-0:3 - 0:4         `\n`
-1:0 - 2:0       variable
-1:0 - 1:1         name: variable_name
-1:0 - 1:1           name_text `x`
-1:2 - 2:0         line_ending
-1:2 - 1:4           `\r\n`
 
 ==================
 Only the last CR in a variable name remains incomplete
@@ -255,28 +280,3 @@ x
 1:2 - 1:3           issue: syntax_issue
 1:2 - 1:3             incomplete_syntax
 1:2 - 1:3               invalid_name_character `\r`
-
-==================
-CR before another name character is invalid
-:cst
-==================
-[a]
-xx
----
-
-0:0 - 1:3   document
-0:0 - 1:3     section
-0:0 - 0:3       header: section_header
-0:0 - 0:1         opening: section_open `[`
-0:1 - 0:2         name: section_name
-0:1 - 0:2           name_text `a`
-0:2 - 0:3         closing: section_close `]`
-0:3 - 1:0       line_ending
-0:3 - 0:4         `\n`
-1:0 - 1:3       variable
-1:0 - 1:3         name: variable_name
-1:0 - 1:1           name_text `x`
-1:1 - 1:2           issue: syntax_issue
-1:1 - 1:2             invalid_syntax
-1:1 - 1:2               invalid_name_character `\r`
-1:2 - 1:3           name_text `x`

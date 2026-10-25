@@ -1,4 +1,13 @@
 ==================
+Empty document
+:cst
+==================
+
+---
+
+0:0 - 0:0   document
+
+==================
 Comment and blank lines retain their owners
 ==================
 # before
@@ -101,15 +110,6 @@ Bare CR at EOF remains comment text
 0:0 - 0:7     comment
 0:0 - 0:1       comment_marker `#`
 0:1 - 0:7       comment_text ` text\r`
-
-==================
-Empty document
-:cst
-==================
-
----
-
-0:0 - 0:0   document
 
 ==================
 Section variable and comment ranges have explicit owners

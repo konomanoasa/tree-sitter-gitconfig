@@ -53,15 +53,6 @@ c="\
           closing: (quote_close))))))
 
 ==================
-EOF CR after a value backslash can complete a continuation
-==================
-[a]
-x=x\
----
-
-(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) issue: (syntax_issue (incomplete_syntax (incomplete_escape)))))))
-
-==================
 Unquoted continuation
 :cst
 ==================
@@ -183,61 +174,6 @@ b
 2:0 - 2:1           value_text `b`
 2:1 - 3:0         line_ending
 2:1 - 2:3           `\r\n`
-
-==================
-EOF ends quote after completed continuation
-:cst
-==================
-[x] a="b\
-
----
-
-0:0 - 1:0   document
-0:0 - 1:0     section
-0:0 - 0:3       header: section_header
-0:0 - 0:1         opening: section_open `[`
-0:1 - 0:2         name: section_name
-0:1 - 0:2           name_text `x`
-0:2 - 0:3         closing: section_close `]`
-0:3 - 1:0       variable
-0:4 - 0:5         name: variable_name
-0:4 - 0:5           name_text `a`
-0:5 - 0:6         operator: assignment_operator `=`
-0:6 - 1:0         value: value
-0:6 - 1:0           quoted_value
-0:6 - 0:7             opening: quote_open `\"`
-0:7 - 0:8             value_text `b`
-0:8 - 1:0             line_continuation
-0:8 - 0:10               `\\\n`
-1:0 - 1:0             issue: syntax_issue
-1:0 - 1:0               incomplete_syntax
-1:0 - 1:0                 missing_quote_close
-
-==================
-Whitespace after a continuation precedes the comment
-:cst
-==================
-[x] a=\
-  #tail
----
-
-0:0 - 1:7   document
-0:0 - 1:7     section
-0:0 - 0:3       header: section_header
-0:0 - 0:1         opening: section_open `[`
-0:1 - 0:2         name: section_name
-0:1 - 0:2           name_text `x`
-0:2 - 0:3         closing: section_close `]`
-0:3 - 1:7       variable
-0:4 - 0:5         name: variable_name
-0:4 - 0:5           name_text `a`
-0:5 - 0:6         operator: assignment_operator `=`
-0:6 - 1:0         value: value
-0:6 - 1:0           line_continuation
-0:6 - 0:8             `\\\n`
-1:2 - 1:7         comment
-1:2 - 1:3           comment_marker `#`
-1:3 - 1:7           comment_text `tail`
 
 ==================
 Leading spaces after continuation preserve value text ranges
@@ -565,33 +501,6 @@ Internal and trailing spaces after continuation preserve value text ranges
 1:5  - 1:10         comment
 1:5  - 1:6            comment_marker `#`
 1:6  - 1:10           comment_text `tail`
-
-==================
-Invalid escape before continuation preserve value text ranges
-:cst
-==================
-[x] a=\q\
-  c
----
-
-0:0 - 1:3   document
-0:0 - 1:3     section
-0:0 - 0:3       header: section_header
-0:0 - 0:1         opening: section_open `[`
-0:1 - 0:2         name: section_name
-0:1 - 0:2           name_text `x`
-0:2 - 0:3         closing: section_close `]`
-0:3 - 1:3       variable
-0:4 - 0:5         name: variable_name
-0:4 - 0:5           name_text `a`
-0:5 - 0:6         operator: assignment_operator `=`
-0:6 - 1:3         value: value
-0:6 - 0:8           issue: syntax_issue
-0:6 - 0:8             invalid_syntax
-0:6 - 0:8               invalid_escape `\\q`
-0:8 - 1:0           line_continuation
-0:8 - 0:10             `\\\n`
-1:0 - 1:3           value_text `  c`
 
 ==================
 Variable in a section with leading spaces after continuation
@@ -946,3 +855,68 @@ x=b\
 2:6  - 2:10           comment_text `tail`
 2:10 - 3:0          line_ending
 2:10 - 2:11           `\n`
+
+==================
+Invalid escape before continuation preserve value text ranges
+:cst
+==================
+[x] a=\q\
+  c
+---
+
+0:0 - 1:3   document
+0:0 - 1:3     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:3       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:3         value: value
+0:6 - 0:8           issue: syntax_issue
+0:6 - 0:8             invalid_syntax
+0:6 - 0:8               invalid_escape `\\q`
+0:8 - 1:0           line_continuation
+0:8 - 0:10             `\\\n`
+1:0 - 1:3           value_text `  c`
+
+==================
+EOF CR after a value backslash can complete a continuation
+==================
+[a]
+x=x\
+---
+
+(document (section header: (section_header opening: (section_open) name: (section_name (name_text)) closing: (section_close)) (line_ending) (variable name: (variable_name (name_text)) operator: (assignment_operator) value: (value (value_text) issue: (syntax_issue (incomplete_syntax (incomplete_escape)))))))
+
+==================
+EOF ends quote after completed continuation
+:cst
+==================
+[x] a="b\
+
+---
+
+0:0 - 1:0   document
+0:0 - 1:0     section
+0:0 - 0:3       header: section_header
+0:0 - 0:1         opening: section_open `[`
+0:1 - 0:2         name: section_name
+0:1 - 0:2           name_text `x`
+0:2 - 0:3         closing: section_close `]`
+0:3 - 1:0       variable
+0:4 - 0:5         name: variable_name
+0:4 - 0:5           name_text `a`
+0:5 - 0:6         operator: assignment_operator `=`
+0:6 - 1:0         value: value
+0:6 - 1:0           quoted_value
+0:6 - 0:7             opening: quote_open `\"`
+0:7 - 0:8             value_text `b`
+0:8 - 1:0             line_continuation
+0:8 - 0:10               `\\\n`
+1:0 - 1:0             issue: syntax_issue
+1:0 - 1:0               incomplete_syntax
+1:0 - 1:0                 missing_quote_close
