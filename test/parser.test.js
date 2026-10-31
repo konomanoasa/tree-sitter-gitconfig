@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { issues, owners } from "./support/cst.js";
+import { hasError } from "./support/cst.js";
 import {
   applyEdits,
-  assertIncrementalEqualsFresh,
+  assertEditMatchesContract,
   parse,
 } from "./support/parser.js";
 
@@ -103,210 +103,113 @@ const largeInputCounts = {
   trailingSpaces: 200_000,
   continuations: 10_000,
   invalidQuotes: 10_000,
+  invalidNameBytes: 10_000,
 };
-const largeInputCases = [
+for (const [name, source, expectedError] of [
   [
     "long trailing whitespace",
     `[x]\na=b${" ".repeat(largeInputCounts.trailingSpaces)}`,
-    0,
+    false,
   ],
   [
     "many continuations",
     `[x]\na=${"a\\\n".repeat(largeInputCounts.continuations)}end`,
-    0,
+    false,
   ],
   [
-    "many invalid quotes",
+    "many unterminated quotes",
     '[x]\na="b\n'.repeat(largeInputCounts.invalidQuotes),
-    largeInputCounts.invalidQuotes,
+    true,
   ],
-];
-for (const [name, source, expectedIssues] of largeInputCases) {
-  test(`gitconfig: large input: ${name}`, () =>
-    assert.equal(issues(parse(source)).length, expectedIssues));
-}
-
-test("gitconfig: a long invalid name run forms one issue with its full range", () => {
-  const invalidNameBytes = 10_000;
-  const prefix = "[x]\n";
-  const startByte = Buffer.byteLength(prefix);
-  const tree = parse(`${prefix}${"_".repeat(invalidNameBytes)}=1`);
-  assert.deepEqual(issues(tree), [
-    [
-      "invalid_syntax",
-      "invalid_name_character",
-      startByte,
-      startByte + invalidNameBytes,
-    ],
-  ]);
-  assert.deepEqual(owners(tree), ["variable_name"]);
-});
-
-test("gitconfig: invalid whitespace cannot absorb a header decoding failure", () => {
-  const source = Buffer.from([91, 120, 32, 34, 97, 34, 32, 255, 32, 93]);
-  const nodes = parse(source);
-  assert.deepEqual(issues(nodes), [
-    ["invalid_syntax", "unexpected_header_content", 6, 7],
-    ["invalid_syntax", "invalid_encoding", 7, 8],
-    ["invalid_syntax", "unexpected_header_content", 8, 9],
-  ]);
-  assert.deepEqual(owners(nodes), [
-    "section_header",
-    "section_header",
-    "section_header",
-  ]);
-  for (const node of nodes.filter(({ kind }) => kind === "syntax_issue"))
-    assert.equal(node.field, "issue");
-});
-
-test("gitconfig: invalid encoding before continuation preserves value text ranges", () => {
-  const source = Buffer.from([
-    91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99,
-  ]);
-  const nodes = parse(source);
-  assert.deepEqual(issues(nodes), [
-    ["invalid_syntax", "invalid_encoding", 6, 7],
-  ]);
-  assert.deepEqual(
-    nodes
-      .filter(({ kind }) => kind === "value_text")
-      .map(({ start, end }) => [
-        start,
-        end,
-        source.subarray(start, end).toString(),
-      ]),
-    [[9, 12, "  c"]],
-  );
-});
-
-const trailingCrCases = [
-  {
-    name: "section name",
-    source: "[a\r",
-    expected: [
-      ["incomplete_syntax", "invalid_name_character", 2, 3],
-      ["incomplete_syntax", "missing_section_close", 3, 3],
-    ],
-    completed: [["invalid_syntax", "missing_section_close", 2, 2]],
-  },
-  {
-    name: "legacy subsection name",
-    source: "[a.b\r",
-    expected: [
-      ["incomplete_syntax", "invalid_name_character", 4, 5],
-      ["incomplete_syntax", "missing_section_close", 5, 5],
-    ],
-    completed: [["invalid_syntax", "missing_section_close", 4, 4]],
-  },
-  {
-    name: "variable name",
-    source: "[a]\nx\r",
-    expected: [["incomplete_syntax", "invalid_name_character", 5, 6]],
-    completed: [],
-  },
-  {
-    name: "value without an assignment operator after a space",
-    source: "[a]\nx \r",
-    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
-    completed: [],
-  },
-  {
-    name: "value without an assignment operator after a tab",
-    source: "[a]\nx\t\r",
-    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
-    completed: [],
-  },
-  {
-    name: "value without an assignment operator before any section",
-    source: "x \r",
-    expected: [
-      ["invalid_syntax", "missing_section_header", 0, 0],
-      ["incomplete_syntax", "missing_assignment_operator", 2, 2],
-    ],
-    completed: [["invalid_syntax", "missing_section_header", 0, 0]],
-  },
-  {
-    name: "value without an assignment operator on the header line",
-    source: "[a] x \r",
-    expected: [["incomplete_syntax", "missing_assignment_operator", 6, 6]],
-    completed: [],
-  },
-  {
-    name: "unquoted value continuation",
-    source: "[a]\nx=x\\\r",
-    expected: [["incomplete_syntax", "incomplete_escape", 7, 9]],
-    completed: [],
-  },
-  {
-    name: "quoted value continuation",
-    source: '[a]\nx="x\\\r',
-    expected: [
-      ["incomplete_syntax", "incomplete_escape", 8, 10],
-      ["incomplete_syntax", "missing_quote_close", 10, 10],
-    ],
-    completed: [["incomplete_syntax", "missing_quote_close", 11, 11]],
-  },
-  {
-    name: "header tail",
-    source: '[a "b"\r',
-    expected: [
-      ["incomplete_syntax", "unexpected_header_content", 6, 7],
-      ["incomplete_syntax", "missing_section_close", 7, 7],
-    ],
-    completed: [["invalid_syntax", "missing_section_close", 6, 6]],
-  },
-  {
-    name: "name violation before the final CR",
-    source: "[a@\r",
-    expected: [
-      ["invalid_syntax", "invalid_name_character", 2, 3],
-      ["incomplete_syntax", "invalid_name_character", 3, 4],
-      ["incomplete_syntax", "missing_section_close", 4, 4],
-    ],
-    completed: [
-      ["invalid_syntax", "invalid_name_character", 2, 3],
-      ["invalid_syntax", "missing_section_close", 3, 3],
-    ],
-  },
-  {
-    name: "header whitespace before the final CR",
-    source: "[a \r",
-    expected: [
-      ["invalid_syntax", "unexpected_header_content", 2, 3],
-      ["incomplete_syntax", "unexpected_header_content", 3, 4],
-      ["incomplete_syntax", "missing_section_close", 4, 4],
-    ],
-    completed: [
-      ["invalid_syntax", "unexpected_header_content", 2, 3],
-      ["invalid_syntax", "missing_section_close", 3, 3],
-    ],
-  },
-  {
-    name: "CR-only line before any section",
-    source: "\r",
-    expected: [
-      ["incomplete_syntax", "missing_section_header", 0, 0],
-      ["incomplete_syntax", "invalid_name_character", 0, 1],
-    ],
-    completed: [],
-  },
-];
-for (const { name, source, expected, completed } of trailingCrCases) {
-  test(`gitconfig: EOF CR can become CRLF in ${name}`, () => {
-    const original = parse(source);
-    assert.deepEqual(issues(original), expected);
-    const edits = [
-      { byte: Buffer.byteLength(source), deleteBytes: 0, insert: "\n" },
-    ];
-    const incremental = parse(source, edits);
-    assert.deepEqual(issues(incremental), completed);
-    assert.deepEqual(incremental, parse(`${source}\n`));
-    edits.push({ byte: Buffer.byteLength(source), deleteBytes: 1, insert: "" });
-    assert.deepEqual(parse(source, edits), original);
+  [
+    "long invalid variable name",
+    `[x]\na${"_".repeat(largeInputCounts.invalidNameBytes)}=1`,
+    true,
+  ],
+]) {
+  test(`gitconfig: large input: ${name}`, () => {
+    assert.equal(hasError(parse(source)), expectedError);
   });
 }
 
-test("gitconfig: a missing assignment stays invalid when LF cannot remove the whole value", () => {
+for (const [name, source, edit, expectedTextRanges] of [
+  [
+    "header layout around a decode failure",
+    Buffer.from([91, 120, 32, 34, 97, 34, 32, 255, 32, 93]),
+    { byte: 7, deleteBytes: 1, insert: "" },
+    [],
+  ],
+  [
+    "decode failure before continuation",
+    Buffer.from([91, 120, 93, 32, 97, 61, 255, 92, 10, 32, 32, 99]),
+    { byte: 6, deleteBytes: 1, insert: "b" },
+    [
+      [6, 7],
+      [9, 12],
+    ],
+  ],
+]) {
+  test(`gitconfig: repairing ${name} restores normal structure`, () => {
+    assert.ok(hasError(parse(source)));
+    const repaired = applyEdits(source, [edit]);
+    const fresh = parse(repaired);
+    assert.equal(hasError(fresh), false);
+    const incremental = assertEditMatchesContract(source, [edit], repaired);
+    assert.deepEqual(incremental, fresh);
+    assert.deepEqual(
+      incremental
+        .filter(({ kind }) => kind === "value_text")
+        .map(({ start, end }) => [start, end]),
+      expectedTextRanges,
+    );
+  });
+}
+
+const trailingCrCases = [
+  { name: "section name", source: "[a\r", completedError: true },
+  { name: "legacy subsection name", source: "[a.b\r", completedError: true },
+  { name: "variable name", source: "[a]\nx\r", completedError: false },
+  {
+    name: "space before a possible value",
+    source: "[a]\nx \r",
+    completedError: false,
+  },
+  {
+    name: "tab before a possible value",
+    source: "[a]\nx\t\r",
+    completedError: false,
+  },
+  { name: "variable outside a section", source: "x \r", completedError: true },
+  { name: "same-line variable", source: "[a] x \r", completedError: false },
+  {
+    name: "unquoted continuation",
+    source: "[a]\nx=x\\\r",
+    completedError: false,
+  },
+  {
+    name: "quoted continuation",
+    source: '[a]\nx="x\\\r',
+    completedError: true,
+  },
+  { name: "header close", source: '[a "b"\r', completedError: true },
+  { name: "invalid name before CR", source: "[a@\r", completedError: true },
+  { name: "header layout before CR", source: "[a \r", completedError: true },
+  { name: "CR-only line", source: "\r", completedError: false },
+];
+for (const { name, source, completedError } of trailingCrCases) {
+  test(`gitconfig: completing CRLF changes the syntax boundary in ${name}`, () => {
+    assert.ok(hasError(parse(source)));
+    const byte = Buffer.byteLength(source);
+    const edits = [{ byte, deleteBytes: 0, insert: "\n" }];
+    const completed = `${source}\n`;
+    assert.equal(hasError(parse(completed)), completedError);
+    assertEditMatchesContract(source, edits, completed);
+    edits.push({ byte, deleteBytes: 1, insert: "" });
+    assertEditMatchesContract(source, edits, source);
+  });
+}
+
+test("gitconfig: LF cannot repair an assignment with non-layout content", () => {
   for (const source of [
     "[a]\nx y\r",
     "[a]\nx \r\r",
@@ -314,32 +217,30 @@ test("gitconfig: a missing assignment stays invalid when LF cannot remove the wh
     "[a]\nx \r ",
     "[a]\nx \r#",
   ]) {
-    const expected = [["invalid_syntax", "missing_assignment_operator", 6, 6]];
-    assert.deepEqual(issues(parse(source)), expected, JSON.stringify(source));
+    assert.ok(hasError(parse(source)), JSON.stringify(source));
     const edits = [
       { byte: Buffer.byteLength(source), deleteBytes: 0, insert: "\n" },
     ];
-    const incremental = parse(source, edits);
-    assert.deepEqual(issues(incremental), expected, JSON.stringify(source));
-    assert.deepEqual(incremental, parse(`${source}\n`));
+    assert.ok(hasError(parse(`${source}\n`)), JSON.stringify(source));
+    assertEditMatchesContract(source, edits, `${source}\n`);
   }
 });
 
-test("gitconfig: a normal name character splits and rejoins an invalid run", () => {
+test("gitconfig: replacing invalid name characters restores one name leaf", () => {
   const source = "[co@@re]";
-  const edits = [{ byte: 4, deleteBytes: 0, insert: "a" }];
-  const split = parse(source, edits);
-  assert.deepEqual(issues(split), [
-    ["invalid_syntax", "invalid_name_character", 3, 4],
-    ["invalid_syntax", "invalid_name_character", 5, 6],
-  ]);
-  assert.deepEqual(split, parse("[co@a@re]"));
-  edits.push({ byte: 4, deleteBytes: 1, insert: "" });
-  const joined = parse(source, edits);
-  assert.deepEqual(issues(joined), [
-    ["invalid_syntax", "invalid_name_character", 3, 5],
-  ]);
-  assert.deepEqual(joined, parse(source));
+  const edits = [
+    { byte: 4, deleteBytes: 0, insert: "a" },
+    { byte: 3, deleteBytes: 3, insert: "" },
+  ];
+  const repaired = applyEdits(source, edits);
+  const nodes = assertEditMatchesContract(source, edits, repaired);
+  assert.equal(hasError(nodes), false);
+  assert.deepEqual(
+    nodes
+      .filter(({ kind }) => kind === "name_text")
+      .map(({ start, end }) => [start, end]),
+    [[1, 5]],
+  );
 });
 
 for (const { name, source, edits, expected } of [
@@ -381,7 +282,7 @@ for (const { name, source, edits, expected } of [
   },
 ]) {
   test(`gitconfig: ${name} reclassifies value whitespace`, () => {
-    const nodes = assertIncrementalEqualsFresh(
+    const nodes = assertEditMatchesContract(
       source,
       edits,
       applyEdits(source, edits),

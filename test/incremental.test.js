@@ -1,9 +1,8 @@
-import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applyEdits,
   assertEditHistory,
-  assertIncrementalEqualsFresh,
+  assertEditMatchesContract,
 } from "./support/parser.js";
 
 const editCases = [
@@ -43,7 +42,7 @@ const editCases = [
     edits: [{ byte: 5, deleteBytes: 0, insert: " \t" }],
   },
   {
-    name: "turn invalid whitespace into a subsection separator",
+    name: "turn header layout into a subsection separator",
     source: "[core ]",
     edits: [{ byte: 6, deleteBytes: 0, insert: '"x"' }],
   },
@@ -58,7 +57,7 @@ const editCases = [
     edits: [{ byte: 6, deleteBytes: 0, insert: "\nx=y" }],
   },
   {
-    name: "remove invalid whitespace after a quoted subsection",
+    name: "remove layout after a quoted subsection",
     source: '[remote "x" \t]',
     edits: [{ byte: 11, deleteBytes: 2, insert: "" }],
   },
@@ -169,36 +168,7 @@ for (const entry of editCases) {
   });
 }
 
-for (const [owner, prefix, suffix] of [
-  ["quoted value", '[a]\nx="', '"'],
-  ["comment", "# a", "b"],
-  ["section name", "[a", "]"],
-]) {
-  for (const bom of ["", "\uFEFF"]) {
-    test(`gitconfig: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
-      const offset = Buffer.byteLength(bom + prefix);
-      const source = Buffer.concat([
-        Buffer.from(bom + prefix),
-        Buffer.from([255]),
-        Buffer.from(`é${suffix}`),
-      ]);
-      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
-      const incremental = assertIncrementalEqualsFresh(
-        source,
-        edits,
-        applyEdits(source, edits),
-      );
-      assert.deepEqual(
-        incremental
-          .filter(({ kind }) => kind === "syntax_issue")
-          .map(({ start, end }) => [start, end]),
-        [[offset, offset + 2]],
-      );
-    });
-  }
-}
-
-test("gitconfig: fixed-seed generated histories preserve source structure and issue ranges", () => {
+test("gitconfig: fixed-seed generated histories match fresh parsing after repair", () => {
   const seed = 0x67ac421;
   const historyCount = 160;
   const editsPerHistory = 4;
@@ -238,7 +208,10 @@ test("gitconfig: fixed-seed generated histories preserve source structure and is
       };
       edits.push(edit);
       bytes = applyEdits(bytes, [edit]);
-      assertIncrementalEqualsFresh(source, edits, bytes);
+      assertEditMatchesContract(source, edits, bytes);
     }
+    const repaired = "[core]\na=1\n";
+    edits.push({ byte: 0, deleteBytes: bytes.length, insert: repaired });
+    assertEditMatchesContract(source, edits, repaired);
   }
 });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { root } from "../scripts/tree-sitter.js";
 import nodeTypes from "../src/node-types.json" with { type: "json" };
-import { issues, leaves, owners, parseCst } from "./support/cst.js";
+import { hasError, leaves, parseCst } from "./support/cst.js";
 import { parse } from "./support/parser.js";
 
 function parseCorpus(text) {
@@ -36,12 +36,8 @@ for (const file of readdirSync(corpusDirectory).sort()) {
     readFileSync(join(corpusDirectory, file), "utf8"),
   );
   for (const { name, source } of entries) {
-    test(`gitconfig: corpus source coverage issue structure and fresh determinism: ${file}: ${name}`, () => {
+    test(`gitconfig: corpus source coverage and full fresh determinism: ${file}: ${name}`, () => {
       const tree = parse(source);
-      issues(tree);
-      for (const node of tree.filter(({ kind }) => kind === "syntax_issue")) {
-        assert.equal(node.field, "issue");
-      }
       assert.deepEqual(parse(source), tree);
     });
   }
@@ -76,27 +72,20 @@ test("gitconfig: corpus input reader rejects unsupported conditions and framing"
   }
 });
 
-test("gitconfig: public issue nodes have one outcome and one reason leaf", () => {
-  const issue = nodeTypes.find(({ type }) => type === "syntax_issue");
-  assert.ok(issue);
-  assert.ok(issue.children);
-  assert.equal(issue.children.required, true);
-  assert.equal(issue.children.multiple, false);
-  assert.deepEqual(
-    issue.children.types.map(({ type }) => type),
-    ["incomplete_syntax", "invalid_syntax"],
-  );
-  for (const { type } of issue.children.types) {
-    const outcome = nodeTypes.find((node) => node.type === type);
-    assert.ok(outcome, type);
-    assert.ok(outcome.children, type);
-    assert.equal(outcome.children.required, true);
-    assert.equal(outcome.children.multiple, false);
-    for (const child of outcome.children.types) {
-      const reason = nodeTypes.find((node) => node.type === child.type);
-      assert.ok(reason, child.type);
-      assert.equal(reason.children, undefined);
-    }
+test("gitconfig: public metadata describes normal structure without diagnostic nodes", () => {
+  for (const node of nodeTypes) {
+    assert.ok(!/issue|invalid|incomplete|missing/.test(node.type), node.type);
+    assert.ok(!node.fields || !("issue" in node.fields), node.type);
+  }
+  for (const [kind, fields] of Object.entries({
+    section: ["header"],
+    section_header: ["opening", "name", "closing"],
+    variable: ["name"],
+    quoted_value: ["opening", "closing"],
+  })) {
+    const node = nodeTypes.find(({ type }) => type === kind);
+    assert.ok(node?.fields, kind);
+    for (const field of fields) assert.equal(node.fields[field].required, true);
   }
 });
 
@@ -105,24 +94,28 @@ const largeInputCounts = {
   valueCharacters: 200_000,
 };
 const largeInputCases = [
-  ["many sections", "[x]\na=1\n".repeat(largeInputCounts.sections), 0],
-  ["long value", `[x]\na=${"a".repeat(largeInputCounts.valueCharacters)}`, 0],
+  ["many sections", "[x]\na=1\n".repeat(largeInputCounts.sections), false],
+  [
+    "long value",
+    `[x]\na=${"a".repeat(largeInputCounts.valueCharacters)}`,
+    false,
+  ],
 ];
-for (const [name, source, expectedIssues] of largeInputCases) {
+for (const [name, source, expectedError] of largeInputCases) {
   test(`gitconfig: large input: ${name}`, () =>
-    assert.equal(issues(parse(source)).length, expectedIssues));
+    assert.equal(hasError(parse(source)), expectedError));
 }
 
-for (const [name, prefix, suffix, owner] of [
-  ["section name", "[a", "b]", "section_name"],
-  ["variable name", "[x] a", "b=1", "variable_name"],
-  ["subsection", '[x "a', 'b"]', "subsection"],
-  ["value", "[x] a=b", "c", "value"],
-  ["quoted value", '[x] a="b', 'c"', "quoted_value"],
-  ["comment", "# a", "b", "comment"],
-  ["after value escape", "[x] a=\\", "b", "value"],
-  ["after subsection escape", '[x "a\\', 'b"]', "subsection"],
-  ["header tail", '[x "a"', "]", "section_header"],
+for (const [name, prefix, suffix] of [
+  ["section name", "[a", "b]"],
+  ["variable name", "[x] a", "b=1"],
+  ["subsection", '[x "a', 'b"]'],
+  ["value", "[x] a=b", "c"],
+  ["quoted value", '[x] a="b', 'c"'],
+  ["comment", "# a", "b"],
+  ["after value escape", "[x] a=\\", "b"],
+  ["after subsection escape", '[x "a\\', 'b"]'],
+  ["header tail", '[x "a"', "]"],
 ]) {
   test(`gitconfig: invalid UTF-8 runs in ${name}`, () => {
     const invalidBytes = Buffer.from([255, 254, 128]);
@@ -132,23 +125,14 @@ for (const [name, prefix, suffix, owner] of [
       Buffer.from(suffix),
     ]);
     const tree = parse(source);
-    assert.deepEqual(issues(tree), [
-      [
-        "invalid_syntax",
-        "invalid_encoding",
-        Buffer.byteLength(prefix),
-        Buffer.byteLength(prefix) + invalidBytes.length,
-      ],
-    ]);
-    assert.deepEqual(owners(tree), [owner]);
+    assert.ok(hasError(tree));
+    assert.deepEqual(parse(source), tree);
   });
 }
 
-test("gitconfig: invalid UTF-8 sequence reports the failed range", () => {
+test("gitconfig: invalid UTF-8 sequence cannot become ordinary value text", () => {
   const source = Buffer.from([91, 120, 93, 32, 97, 61, 0xc3, 0x28]);
-  assert.deepEqual(issues(parse(source)), [
-    ["invalid_syntax", "invalid_encoding", 6, 7],
-  ]);
+  assert.ok(hasError(parse(source)));
 });
 
 test("gitconfig: CST helpers preserve fields, hierarchy and UTF-8 ranges across CRLF", () => {
@@ -204,10 +188,17 @@ test("gitconfig: CST helpers preserve fields, hierarchy and UTF-8 ranges across 
   ]);
 });
 
-test("gitconfig: CST helpers reject truncated roots and native recovery nodes", () => {
+test("gitconfig: CST helpers retain standard artifacts and reject truncated roots", () => {
   assert.throws(() => parseCst("0:0 - 0:1   document", "é"));
-  for (const kind of ["ERROR", "MISSING"]) {
-    const text = `0:0 - 0:1   document\n0:0 - 0:1     ${kind}`;
-    assert.throws(() => parseCst(text, "a"));
-  }
+  const root = parseCst("0:0 - 0:1   ERROR", "a");
+  assert.deepEqual(root, [
+    { kind: "ERROR", field: null, start: 0, end: 1, parent: null },
+  ]);
+  const missing = parseCst(
+    "0:0 - 0:1   document\n0:1 - 0:1     • section_close",
+    "a",
+  );
+  assert.equal(missing[1].kind, "MISSING section_close");
+  assert.ok(hasError(root));
+  assert.ok(hasError(missing));
 });
