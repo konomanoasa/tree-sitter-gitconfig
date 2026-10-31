@@ -246,57 +246,6 @@ static void test_line_ending_discards_finished_line_state(void) {
   }
 }
 
-static void test_rejected_input_preserves_scanner_state(void) {
-  const struct {
-    enum Mode mode;
-    int32_t input[2];
-    size_t length;
-  } cases[] = {
-    {HEADER_NAME, {-1, 0}, 1},
-    {VARIABLE_NAME, {'1', 0}, 1},
-    {SUBSECTION, {0, 0}, 1},
-    {VALUE, {-1, 0}, 1},
-    {QUOTED_VALUE, {-1, 0}, 1},
-    {COMMENT, {-1, 0}, 1},
-    {HEADER_CLOSE, {'x', 0}, 1},
-    {VALUE, {'\\', 'q'}, 2},
-    {SUBSECTION, {'\\', 0}, 2},
-    {VALUE, {'\\', 0}, 1},
-  };
-  bool valid[ERROR_SENTINEL + 1] = {false};
-  for (unsigned token = 0; token < ERROR_SENTINEL; token += 1)
-    valid[token] = true;
-  for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index += 1) {
-    Scanner scanner = {
-      .content_end = (uint32_t)cases[index].length,
-      .line_end = (uint32_t)cases[index].length,
-      .subsection_at = NONE,
-      .mode = cases[index].mode,
-      .ready = true,
-    };
-    const Scanner expected = scanner;
-    struct MockLexer mock;
-    init_mock_lexer(&mock, cases[index].input, cases[index].length);
-    assert(
-      !tree_sitter_gitconfig_external_scanner_scan(&scanner, &mock.lexer, valid)
-    );
-    assert(memcmp(&scanner, &expected, sizeof(expected)) == 0);
-  }
-}
-
-static void test_missing_scanner_state_is_memory_safe(void) {
-  struct MockLexer mock;
-  init_mock_lexer(&mock, NULL, 0);
-  bool valid[ERROR_SENTINEL + 1] = {false};
-  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
-  assert(tree_sitter_gitconfig_external_scanner_serialize(NULL, buffer) == 0);
-  tree_sitter_gitconfig_external_scanner_deserialize(NULL, NULL, 0);
-  assert(
-    !tree_sitter_gitconfig_external_scanner_scan(NULL, &mock.lexer, valid)
-  );
-  tree_sitter_gitconfig_external_scanner_destroy(NULL);
-}
-
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
 static void test_reuse_allocator_failure_and_cleanup(void) {
   assert(reuse_live_allocations == 0);
@@ -311,14 +260,26 @@ static void test_reuse_allocator_failure_and_cleanup(void) {
 }
 #endif
 
+static void test_missing_scanner_state_is_memory_safe(void) {
+  struct MockLexer mock;
+  init_mock_lexer(&mock, NULL, 0);
+  bool valid[ERROR_SENTINEL + 1] = {false};
+  char buffer[TREE_SITTER_SERIALIZATION_BUFFER_SIZE];
+  assert(tree_sitter_gitconfig_external_scanner_serialize(NULL, buffer) == 0);
+  tree_sitter_gitconfig_external_scanner_deserialize(NULL, NULL, 0);
+  assert(
+    !tree_sitter_gitconfig_external_scanner_scan(NULL, &mock.lexer, valid)
+  );
+  tree_sitter_gitconfig_external_scanner_destroy(NULL);
+}
+
 int main(void) {
+  test_missing_scanner_state_is_memory_safe();
   test_internal_lexer_accepts_eof_only_at_input_end();
   test_lifecycle_and_serialization_round_trip();
   test_disabled_and_recovery_scans_preserve_state();
   test_restored_comment_state_preserves_token_ranges();
   test_line_ending_discards_finished_line_state();
-  test_rejected_input_preserves_scanner_state();
-  test_missing_scanner_state_is_memory_safe();
 #ifdef TREE_SITTER_REUSE_ALLOCATOR
   test_reuse_allocator_failure_and_cleanup();
 #endif

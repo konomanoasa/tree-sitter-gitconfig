@@ -1,3 +1,64 @@
+const missingKinds = (name) => [
+  [`missing_${name}`, "invalid_syntax", `missing_${name}`],
+  [`incomplete_${name}`, "incomplete_syntax", `missing_${name}`],
+];
+const issueKinds = [
+  ["invalid_encoding", "invalid_syntax", "invalid_encoding"],
+  ["invalid_name_character", "invalid_syntax", "invalid_name_character"],
+  ["incomplete_name_character", "incomplete_syntax", "invalid_name_character"],
+  [
+    "invalid_subsection_character",
+    "invalid_syntax",
+    "invalid_subsection_character",
+  ],
+  ["invalid_escape", "invalid_syntax", "invalid_escape"],
+  ["ended_escape", "invalid_syntax", "incomplete_escape"],
+  ["incomplete_escape", "incomplete_syntax", "incomplete_escape"],
+  ...["section_name", "section_close", "quote_close"].flatMap(missingKinds),
+  ["missing_variable_name", "invalid_syntax", "missing_variable_name"],
+  [
+    "missing_subsection_separator",
+    "invalid_syntax",
+    "missing_subsection_separator",
+  ],
+  ["unexpected_header_content", "invalid_syntax", "unexpected_header_content"],
+  [
+    "incomplete_header_content",
+    "incomplete_syntax",
+    "unexpected_header_content",
+  ],
+  ...missingKinds("assignment_operator"),
+  ...missingKinds("section_header"),
+];
+const issueRules = Object.fromEntries(
+  issueKinds.flatMap(([token, outcome, reason]) => [
+    [`_${token}_outcome`, ($) => alias($[`_${token}`], $[reason])],
+    [`_${token}_issue`, ($) => alias($[`_${token}_outcome`], $[outcome])],
+  ]),
+);
+const issue = ($, name) =>
+  field("issue", alias($[`_${name}_issue`], $.syntax_issue));
+const issues = ($, ...names) => names.map((name) => issue($, name));
+const missing = ($, name) =>
+  choice(issue($, `missing_${name}`), issue($, `incomplete_${name}`));
+const nameContent = ($, text) =>
+  choice(
+    text,
+    ...issues(
+      $,
+      "invalid_name_character",
+      "incomplete_name_character",
+      "invalid_encoding",
+    ),
+  );
+const valuePieces = ($) => [
+  $.value_text,
+  $.escape,
+  $.line_continuation,
+  ...issues($, "invalid_encoding", "invalid_escape", "incomplete_escape"),
+  $._escape_prefix,
+];
+
 export default grammar({
   name: "gitconfig",
   externals: ($) => [
@@ -26,13 +87,24 @@ export default grammar({
     $.comment_text,
     $.escape,
     $.line_continuation,
+    $._escape_prefix,
+    $._header_tail_start,
     $.subsection_separator,
     $._subsection_end,
+    ...issueKinds.map(([name]) => $[`_${name}`]),
     $._error_sentinel,
   ],
   extras: ($) => [$._line_start, $._layout, $._unmatchable],
   rules: {
-    document: ($) => repeat(choice($.section, $.blank_line, $.comment)),
+    document: ($) =>
+      repeat(
+        choice(
+          $.section,
+          $.blank_line,
+          $.comment,
+          alias($._orphan_variable, $.variable),
+        ),
+      ),
     section: ($) =>
       prec.right(
         seq(
@@ -46,35 +118,74 @@ export default grammar({
     section_header: ($) =>
       seq(
         field("opening", $.section_open),
-        field("name", $.section_name),
-        optional(field("subsection", $.subsection)),
-        field("closing", $.section_close),
+        optional(issue($, "unexpected_header_content")),
+        choice(field("name", $.section_name), missing($, "section_name")),
+        optional(
+          seq(
+            optional(issue($, "missing_subsection_separator")),
+            field("subsection", $.subsection),
+          ),
+        ),
+        $._header_tail_start,
+        repeat(
+          choice(
+            ...issues(
+              $,
+              "unexpected_header_content",
+              "incomplete_header_content",
+              "invalid_encoding",
+            ),
+          ),
+        ),
+        choice(field("closing", $.section_close), missing($, "section_close")),
       ),
     section_name: ($) => $._name,
     variable_name: ($) => $._name,
-    _name: ($) => seq($._name_start, $.name_text, $._name_end),
+    _name: ($) =>
+      seq($._name_start, repeat1(nameContent($, $.name_text)), $._name_end),
     subsection: ($) =>
       choice(
         $._quoted_subsection,
         seq(
           $.subsection_separator,
-          optional($.subsection_text),
+          repeat(nameContent($, $.subsection_text)),
           $._subsection_end,
         ),
       ),
     _quoted_subsection: ($) =>
       seq(
         field("opening", $.quote_open),
-        repeat(choice($.subsection_text, $.escape)),
-        field("closing", $.quote_close),
+        repeat(
+          choice(
+            $.subsection_text,
+            $.escape,
+            ...issues(
+              $,
+              "invalid_encoding",
+              "invalid_subsection_character",
+              "ended_escape",
+              "incomplete_escape",
+            ),
+            $._escape_prefix,
+          ),
+        ),
+        choice(field("closing", $.quote_close), missing($, "quote_close")),
       ),
-    variable: ($) =>
+    variable: ($) => seq($._variable_start, $._variable_content),
+    _orphan_variable: ($) =>
+      seq($._variable_start, missing($, "section_header"), $._variable_content),
+    _variable_content: ($) =>
       seq(
-        $._variable_start,
-        field("name", $.variable_name),
+        choice(
+          field("name", $.variable_name),
+          issue($, "missing_variable_name"),
+        ),
         optional(
           seq(
-            field("operator", $.assignment_operator),
+            choice(
+              field("operator", $.assignment_operator),
+              missing($, "assignment_operator"),
+            ),
             optional(field("value", $.value)),
           ),
         ),
@@ -84,26 +195,26 @@ export default grammar({
     value: ($) =>
       seq(
         $._value_start,
-        repeat1(choice($.quoted_value, $._value_piece)),
+        repeat1(choice($.quoted_value, ...valuePieces($))),
         $._value_end,
       ),
-    _value_piece: ($) => choice($.value_text, $.escape, $.line_continuation),
     quoted_value: ($) =>
       seq(
         field("opening", $.quote_open),
-        repeat($._value_piece),
-        field("closing", $.quote_close),
+        repeat(choice(...valuePieces($))),
+        choice(field("closing", $.quote_close), missing($, "quote_close")),
       ),
     comment: ($) =>
       seq(
         $._comment_start,
         $.comment_marker,
-        optional($.comment_text),
+        repeat(choice($.comment_text, issue($, "invalid_encoding"))),
         optional($.line_ending),
         $._comment_end,
       ),
     blank_line: ($) => seq($._blank_start, choice($.line_ending, $._eof)),
     // Prevent premature EOF acceptance in Tree-sitter 0.27.0.
     _unmatchable: () => token(seq(/[\s\S]/, /[^\s\S]/)),
+    ...issueRules,
   },
 });

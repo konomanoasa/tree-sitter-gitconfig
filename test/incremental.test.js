@@ -1,8 +1,10 @@
+import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applyEdits,
   assertEditHistory,
-  assertEditMatchesContract,
+  assertIncrementalEqualsFresh,
+  parse,
 } from "./support/parser.js";
 
 const editCases = [
@@ -42,7 +44,7 @@ const editCases = [
     edits: [{ byte: 5, deleteBytes: 0, insert: " \t" }],
   },
   {
-    name: "turn header layout into a subsection separator",
+    name: "turn invalid whitespace into a subsection separator",
     source: "[core ]",
     edits: [{ byte: 6, deleteBytes: 0, insert: '"x"' }],
   },
@@ -57,7 +59,7 @@ const editCases = [
     edits: [{ byte: 6, deleteBytes: 0, insert: "\nx=y" }],
   },
   {
-    name: "remove layout after a quoted subsection",
+    name: "remove invalid whitespace after a quoted subsection",
     source: '[remote "x" \t]',
     edits: [{ byte: 11, deleteBytes: 2, insert: "" }],
   },
@@ -168,9 +170,38 @@ for (const entry of editCases) {
   });
 }
 
-test("gitconfig: fixed-seed generated histories match fresh parsing after repair", () => {
+for (const [owner, prefix, suffix] of [
+  ["quoted value", '[a]\nx="', '"'],
+  ["comment", "# a", "b"],
+  ["section name", "[a", "]"],
+]) {
+  for (const bom of ["", "\uFEFF"]) {
+    test(`gitconfig: splitting the character after a decoding failure merges the issue in ${owner}${bom && " after a BOM"}`, () => {
+      const offset = Buffer.byteLength(bom + prefix);
+      const source = Buffer.concat([
+        Buffer.from(bom + prefix),
+        Buffer.from([255]),
+        Buffer.from(`é${suffix}`),
+      ]);
+      const edits = [{ byte: offset + 2, deleteBytes: 1, insert: "" }];
+      const incremental = assertIncrementalEqualsFresh(
+        source,
+        edits,
+        applyEdits(source, edits),
+      );
+      assert.deepEqual(
+        incremental
+          .filter(({ kind }) => kind === "syntax_issue")
+          .map(({ start, end }) => [start, end]),
+        [[offset, offset + 2]],
+      );
+    });
+  }
+}
+
+test("gitconfig: fixed-seed generated histories preserve source structure and issue ranges", () => {
   const seed = 0x67ac421;
-  const historyCount = 160;
+  const historiesPerInput = 2;
   const editsPerHistory = 4;
   const maxDeletedBytes = 3;
   const lcgMultiplier = 1_664_525;
@@ -195,6 +226,7 @@ test("gitconfig: fixed-seed generated histories match fresh parsing after repair
     "[remote.origin \t",
     '[remote "x" \t]',
   ];
+  const historyCount = seeds.length * historiesPerInput;
   for (let sample = 0; sample < historyCount; sample++) {
     const source = seeds[sample % seeds.length];
     let bytes = Buffer.from(source);
@@ -208,10 +240,75 @@ test("gitconfig: fixed-seed generated histories match fresh parsing after repair
       };
       edits.push(edit);
       bytes = applyEdits(bytes, [edit]);
-      assertEditMatchesContract(source, edits, bytes);
     }
-    const repaired = "[core]\na=1\n";
-    edits.push({ byte: 0, deleteBytes: bytes.length, insert: repaired });
-    assertEditMatchesContract(source, edits, repaired);
+    assertEditHistory({ source, edits });
   }
 });
+
+for (const newline of ["\n", "\r\n"]) {
+  const tail = "[tail]\nkey=one\nother=two\n".replaceAll("\n", newline);
+  for (const prefix of ["", "[before]\na=b\n".replaceAll("\n", newline)]) {
+    for (const line of ["[core]", '[remote "origin"]', 'key="value"']) {
+      if (!prefix && line.startsWith("key")) continue;
+      test(`gitconfig: truncating ${JSON.stringify(line)} before ${JSON.stringify(newline)} preserves adjacent entries with prefix ${JSON.stringify(prefix)}`, () => {
+        const initial = prefix + line + newline + tail;
+        const original = parse(initial);
+        for (let cut = 0; cut < line.length; cut++) {
+          const source = prefix + line.slice(0, cut) + newline + tail;
+          const edits = [
+            {
+              byte: prefix.length + cut,
+              deleteBytes: line.length - cut,
+              insert: "",
+            },
+          ];
+          const tree = assertIncrementalEqualsFresh(initial, edits, source);
+          const boundary = prefix.length + cut + newline.length;
+          if (prefix) {
+            assert.deepEqual(
+              tree
+                .filter(
+                  (node) =>
+                    node.kind === "variable" && node.start < prefix.length,
+                )
+                .map(({ start, end }) => [start, end]),
+              [[8 + newline.length, prefix.length]],
+              source,
+            );
+          }
+          assert.deepEqual(
+            tree
+              .filter((node) => node.parent === 0 && node.start >= boundary)
+              .map(({ kind, start, end }) => [
+                kind,
+                start - boundary,
+                end - boundary,
+              ]),
+            [["section", 0, tail.length]],
+            source,
+          );
+          for (const node of tree.filter(
+            (node) => node.kind === "syntax_issue",
+          )) {
+            assert.ok(
+              node.start >= prefix.length && node.end <= boundary,
+              source,
+            );
+          }
+          assert.deepEqual(
+            parse(initial, [
+              ...edits,
+              {
+                byte: prefix.length + cut,
+                deleteBytes: 0,
+                insert: line.slice(cut),
+              },
+            ]),
+            original,
+            source,
+          );
+        }
+      });
+    }
+  }
+}

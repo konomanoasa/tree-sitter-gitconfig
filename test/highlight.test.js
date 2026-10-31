@@ -180,7 +180,7 @@ const grammar = grammars[0];
 
 const finalCaptureCases = [
   {
-    name: "header layout preserves neighboring captures",
+    name: "invalid header whitespace preserves neighboring captures",
     source: "[ core ] x=y",
     captures: [
       [0, 1, "punctuation.bracket"],
@@ -241,7 +241,46 @@ const finalCaptureCases = [
       [9, 10, "string"],
     ],
   },
-
+  {
+    name: "incomplete escape has no capture",
+    source: "[x] a=b\\",
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 2, "type"],
+      [2, 3, "punctuation.bracket"],
+      [4, 5, "property"],
+      [5, 6, "operator"],
+      [6, 7, "string"],
+    ],
+  },
+  {
+    name: "invalid escape preserves neighboring text",
+    source: "[x] a=b\\qc",
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 2, "type"],
+      [2, 3, "punctuation.bracket"],
+      [4, 5, "property"],
+      [5, 6, "operator"],
+      [6, 7, "string"],
+      [9, 10, "string"],
+    ],
+  },
+  {
+    name: "incomplete quote preserves the next line",
+    source: '[x] a="b\nc=1',
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 2, "type"],
+      [2, 3, "punctuation.bracket"],
+      [4, 5, "property"],
+      [5, 6, "operator"],
+      [6, 8, "string"],
+      [9, 10, "property"],
+      [10, 11, "operator"],
+      [11, 12, "string"],
+    ],
+  },
   {
     name: "continued value preserves internal whitespace captures",
     source: "[x] a=b\\\n  c",
@@ -304,6 +343,20 @@ const finalCaptureCases = [
       [4, 5, "property"],
       [5, 6, "operator"],
       [6, 14, "string"],
+    ],
+  },
+  {
+    name: "invalid name characters stay uncolored",
+    source: "[a_b] x.y=z",
+    captures: [
+      [0, 1, "punctuation.bracket"],
+      [1, 2, "type"],
+      [3, 4, "type"],
+      [4, 5, "punctuation.bracket"],
+      [6, 7, "property"],
+      [8, 9, "property"],
+      [9, 10, "operator"],
+      [10, 11, "string"],
     ],
   },
 ];

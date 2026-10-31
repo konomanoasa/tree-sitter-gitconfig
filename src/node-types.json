@@ -17,7 +17,18 @@
   {
     "type": "comment",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
@@ -57,6 +68,116 @@
         {
           "type": "section",
           "named": true
+        },
+        {
+          "type": "variable",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "incomplete_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "missing_assignment_operator",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_header",
+          "named": true
+        },
+        {
+          "type": "missing_section_name",
+          "named": true
+        },
+        {
+          "type": "unexpected_header_content",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "invalid_syntax",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "incomplete_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_encoding",
+          "named": true
+        },
+        {
+          "type": "invalid_escape",
+          "named": true
+        },
+        {
+          "type": "invalid_name_character",
+          "named": true
+        },
+        {
+          "type": "invalid_subsection_character",
+          "named": true
+        },
+        {
+          "type": "missing_assignment_operator",
+          "named": true
+        },
+        {
+          "type": "missing_quote_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_close",
+          "named": true
+        },
+        {
+          "type": "missing_section_header",
+          "named": true
+        },
+        {
+          "type": "missing_section_name",
+          "named": true
+        },
+        {
+          "type": "missing_subsection_separator",
+          "named": true
+        },
+        {
+          "type": "missing_variable_name",
+          "named": true
+        },
+        {
+          "type": "unexpected_header_content",
+          "named": true
         }
       ]
     }
@@ -67,10 +188,20 @@
     "fields": {
       "closing": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
             "named": true
           }
         ]
@@ -149,7 +280,7 @@
     "fields": {
       "closing": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "section_close",
@@ -157,9 +288,19 @@
           }
         ]
       },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "section_name",
@@ -192,10 +333,21 @@
   {
     "type": "section_name",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
-      "multiple": false,
-      "required": true,
+      "multiple": true,
+      "required": false,
       "types": [
         {
           "type": "name_text",
@@ -214,6 +366,16 @@
         "types": [
           {
             "type": "quote_close",
+            "named": true
+          }
+        ]
+      },
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
             "named": true
           }
         ]
@@ -249,12 +411,42 @@
     }
   },
   {
-    "type": "value",
+    "type": "syntax_issue",
     "named": true,
     "fields": {},
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": true,
+      "types": [
+        {
+          "type": "incomplete_syntax",
+          "named": true
+        },
+        {
+          "type": "invalid_syntax",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "value",
+    "named": true,
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
       "types": [
         {
           "type": "escape",
@@ -279,9 +471,19 @@
     "type": "variable",
     "named": true,
     "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "variable_name",
@@ -328,10 +530,21 @@
   {
     "type": "variable_name",
     "named": true,
-    "fields": {},
+    "fields": {
+      "issue": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "syntax_issue",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
-      "multiple": false,
-      "required": true,
+      "multiple": true,
+      "required": false,
       "types": [
         {
           "type": "name_text",
@@ -357,11 +570,59 @@
     "named": true
   },
   {
+    "type": "incomplete_escape",
+    "named": true
+  },
+  {
+    "type": "invalid_encoding",
+    "named": true
+  },
+  {
+    "type": "invalid_escape",
+    "named": true
+  },
+  {
+    "type": "invalid_name_character",
+    "named": true
+  },
+  {
+    "type": "invalid_subsection_character",
+    "named": true
+  },
+  {
     "type": "line_continuation",
     "named": true
   },
   {
     "type": "line_ending",
+    "named": true
+  },
+  {
+    "type": "missing_assignment_operator",
+    "named": true
+  },
+  {
+    "type": "missing_quote_close",
+    "named": true
+  },
+  {
+    "type": "missing_section_close",
+    "named": true
+  },
+  {
+    "type": "missing_section_header",
+    "named": true
+  },
+  {
+    "type": "missing_section_name",
+    "named": true
+  },
+  {
+    "type": "missing_subsection_separator",
+    "named": true
+  },
+  {
+    "type": "missing_variable_name",
     "named": true
   },
   {
@@ -390,6 +651,10 @@
   },
   {
     "type": "subsection_text",
+    "named": true
+  },
+  {
+    "type": "unexpected_header_content",
     "named": true
   },
   {
