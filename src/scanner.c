@@ -177,7 +177,6 @@ static bool emit(TSLexer *lexer, const bool *valid, enum Token token) {
   return true;
 }
 
-// Include the next decoded character so edits invalidate the run.
 static bool invalid_run(Scanner *s, TSLexer *lexer, const bool *valid) {
   do advance(s, lexer);
   while (!lexer->eof(lexer) && lexer->lookahead == -1);
@@ -235,6 +234,13 @@ static bool start_comment(Scanner *s, TSLexer *lexer, const bool *valid) {
   s->comment_return = s->mode;
   s->mode = COMMENT_MARK;
   return emit(lexer, valid, COMMENT_START);
+}
+
+static bool start_entry(Scanner *s, TSLexer *lexer, const bool *valid) {
+  if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
+  const bool header = lexer->lookahead == '[';
+  s->mode = header ? HEADER_OPEN : VARIABLE_HEADER;
+  return emit(lexer, valid, header ? SECTION_START : VARIABLE_START);
 }
 
 static bool header_space(Scanner *s, TSLexer *lexer, const bool *valid) {
@@ -299,13 +305,7 @@ static bool start_content(Scanner *s, TSLexer *lexer, const bool *valid) {
     s->mode = BLANK;
     return emit(lexer, valid, BLANK_START);
   }
-  if (lexer->lookahead == '[') {
-    s->mode = HEADER_OPEN;
-    return emit(lexer, valid, SECTION_START);
-  }
-  if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
-  s->mode = VARIABLE_HEADER;
-  return emit(lexer, valid, VARIABLE_START);
+  return start_entry(s, lexer, valid);
 }
 
 static bool name_start(Scanner *s, TSLexer *lexer, const bool *valid) {
@@ -506,13 +506,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
           s->mode = START;
           return end_line(s, lexer, valid);
         }
-        if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
-        if (lexer->lookahead == '[') {
-          s->mode = HEADER_OPEN;
-          return emit(lexer, valid, SECTION_START);
-        }
-        s->mode = VARIABLE_HEADER;
-        return emit(lexer, valid, VARIABLE_START);
+        return start_entry(s, lexer, valid);
       case VARIABLE_HEADER:
         s->mode = VARIABLE_NAME;
         if (valid[MISSING_SECTION_HEADER])

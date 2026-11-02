@@ -221,7 +221,6 @@ export default grammar({
         $._comment_end,
       ),
     blank_line: ($) => seq($._blank_start, choice($.line_ending, $._eof)),
-    // Prevent premature EOF acceptance in Tree-sitter 0.27.0.
     _unmatchable: () => token(seq(/[\s\S]/, /[^\s\S]/)),
     ...issueRules,
   },
