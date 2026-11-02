@@ -89,6 +89,7 @@ export default grammar({
     $.line_continuation,
     $._escape_prefix,
     $._header_tail_start,
+    $._header_separator,
     $.subsection_separator,
     $._subsection_end,
     ...issueKinds.map(([name]) => $[`_${name}`]),
@@ -111,7 +112,14 @@ export default grammar({
           $._section_start,
           field("header", $.section_header),
           repeat(
-            choice($.variable, $.blank_line, $.comment, $.line_ending, $._eof),
+            choice(
+              $.variable,
+              $.blank_line,
+              $.comment,
+              $.line_ending,
+              $._header_separator,
+              $._eof,
+            ),
           ),
         ),
       ),

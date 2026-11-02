@@ -31,6 +31,7 @@ enum Token {
   LINE_CONTINUATION,
   ESCAPE_PREFIX,
   HEADER_TAIL_START,
+  HEADER_SEPARATOR,
   SUBSECTION_SEPARATOR,
   SUBSECTION_END,
   INVALID_ENCODING,
@@ -496,6 +497,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
         if (!at_end(s) && space(c)) {
           skip_spaces(s, lexer);
           lexer->mark_end(lexer);
+          if (!at_end(s) && lexer->lookahead == '[')
+            return emit(lexer, valid, HEADER_SEPARATOR);
           if (at_end(s) || comment(lexer->lookahead))
             return emit(lexer, valid, LAYOUT);
         }
@@ -504,6 +507,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid) {
           return end_line(s, lexer, valid);
         }
         if (comment(lexer->lookahead)) return start_comment(s, lexer, valid);
+        if (lexer->lookahead == '[') {
+          s->mode = HEADER_OPEN;
+          return emit(lexer, valid, SECTION_START);
+        }
         s->mode = VARIABLE_HEADER;
         return emit(lexer, valid, VARIABLE_START);
       case VARIABLE_HEADER:

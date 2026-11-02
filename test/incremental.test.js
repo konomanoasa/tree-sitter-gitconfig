@@ -89,6 +89,15 @@ const editCases = [
     edits: [{ byte: 5, deleteBytes: 0, insert: "]" }],
   },
   {
+    name: "join section headers and change their separating layout",
+    source: "[core]\n[other]\nx=y",
+    edits: [
+      { byte: 6, deleteBytes: 1, insert: "" },
+      { byte: 6, deleteBytes: 0, insert: " \t" },
+      { byte: 6, deleteBytes: 2, insert: "\n" },
+    ],
+  },
+  {
     name: "turn variable into comment",
     source: "[x]\na=1",
     edits: [{ byte: 4, deleteBytes: 0, insert: "#" }],

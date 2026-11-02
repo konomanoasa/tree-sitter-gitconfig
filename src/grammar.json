@@ -72,6 +72,10 @@
                 },
                 {
                   "type": "SYMBOL",
+                  "name": "_header_separator"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "_eof"
                 }
               ]
@@ -1550,6 +1554,10 @@
     {
       "type": "SYMBOL",
       "name": "_header_tail_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_header_separator"
     },
     {
       "type": "SYMBOL",

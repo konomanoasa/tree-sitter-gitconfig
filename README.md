@@ -6,7 +6,7 @@
 [![PyPI](https://img.shields.io/pypi/v/konomanoasa-tree-sitter-gitconfig)](https://pypi.org/project/konomanoasa-tree-sitter-gitconfig/)
 
 [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
-Git configuration files 2.55.0.
+Git configuration files 2.56.0.
 
 ## Installation
 
@@ -24,7 +24,7 @@ npm test
 
 ## Specification
 
-[Git 2.55.0 gitconfig manual](https://git-scm.com/docs/git-config/2.55.0)
+[Git 2.56.0 gitconfig manual](https://git-scm.com/docs/git-config/2.56.0)
 
 ## License
 
